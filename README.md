@@ -36,6 +36,7 @@ Pytest pour Python et Jest/React Testing Library pour le frontend.
 
 Organisation dui Dépôt 
 La structure proposé est la suiivante :
+
 bionexus-mvp/
  ├─ backend/
  │   ├─ bionexus/          # Code Django principal (settings, urls, etc.)

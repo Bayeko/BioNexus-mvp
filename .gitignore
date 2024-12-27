@@ -1,9 +1,11 @@
 
-# Environnements virtuels
-venv/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.sqlite3
 
-# Fichiers sensibles
-.env
+# Virtualenv
+env/
+backend/env/
 
+tree_output.txt

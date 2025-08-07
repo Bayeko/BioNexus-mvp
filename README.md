@@ -41,16 +41,9 @@ Organisation dui Dépôt
 La structure proposé est la suiivante :
 
 bionexus-mvp/
- ├─ backend/
- │   ├─ bionexus/          # Code Django principal (settings, urls, etc.)
- │   ├─ apps/              # Modules spécifiques (ex: echantillons, protocoles)
- │   ├─ requirements.txt   # Dépendances Python
- │   └─ ... 
- ├─ frontend/
- │   ├─ src/
- │   ├─ public/
- │   ├─ package.json
- │   └─ ...
+ ├─ bionexus-platform/
+ │   ├─ backend/          # Code Django principal (settings, urls, etc.)
+ │   └─ frontend/         # Code React
  ├─ docs/
  │   └─ ...               # Documentation fonctionnelle, specs, maquettes
  ├─ docker-compose.yml
@@ -59,8 +52,8 @@ bionexus-mvp/
  ├─ .gitignore
  ├─ README.md              # Ce fichier
  └─ ...
-backend/ : Tout le code Python (Django), y compris la configuration DRF et le fichier requirements.txt.
-frontend/ : Code source React (ou TypeScript React), configurations Webpack/Vite, etc.
+bionexus-platform/backend/ : Tout le code Python (Django), y compris la configuration DRF et le fichier requirements.txt.
+bionexus-platform/frontend/ : Code source React (ou TypeScript React), configurations Webpack/Vite, etc.
 docs/ : Documentation supplémentaire, cahier des charges, spécifications techniques ou fonctionnelles.
 docker-compose.yml : Orchestration des conteneurs (backend + base de données + frontend).
 
@@ -76,7 +69,7 @@ Backend sera accessible sur http://localhost:8000/.
 Frontend sera accessible sur http://localhost:3000/ (selon la configuration).
 Configuration "manuelle" (optionnelle) 
 a) Installation Backend (Django)
-cd backend
+cd bionexus-platform/backend
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
@@ -132,16 +125,9 @@ La structure proposée est la suivante :
 graphql
 Copier le code
 bionexus-mvp/
- ├─ backend/
- │   ├─ bionexus/          # Code Django principal (settings, urls, etc.)
- │   ├─ apps/              # Modules spécifiques (ex: echantillons, protocoles)
- │   ├─ requirements.txt   # Dépendances Python
- │   └─ ... 
- ├─ frontend/
- │   ├─ src/
- │   ├─ public/
- │   ├─ package.json
- │   └─ ...
+ ├─ bionexus-platform/
+ │   ├─ backend/          # Code Django principal (settings, urls, etc.)
+ │   └─ frontend/         # Code React
  ├─ docs/
  │   └─ ...               # Documentation fonctionnelle, specs, maquettes
  ├─ docker-compose.yml
@@ -150,8 +136,8 @@ bionexus-mvp/
  ├─ .gitignore
  ├─ README.md              # Ce fichier
  └─ ...
-backend/ : Tout le code Python (Django), y compris la configuration DRF et le fichier requirements.txt.
-frontend/ : Code source React (ou TypeScript React), configurations Webpack/Vite, etc.
+bionexus-platform/backend/ : Tout le code Python (Django), y compris la configuration DRF et le fichier requirements.txt.
+bionexus-platform/frontend/ : Code source React (ou TypeScript React), configurations Webpack/Vite, etc.
 docs/ : Documentation supplémentaire, cahier des charges, spécifications techniques ou fonctionnelles.
 docker-compose.yml : Orchestration des conteneurs (backend + base de données + frontend).
 Installation & Lancement (Local)
@@ -173,7 +159,7 @@ Frontend sera accessible sur http://localhost:3000/ (selon la configuration).
 a) Installation Backend (Django)
 bash
 Copier le code
-cd backend
+cd bionexus-platform/backend
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
@@ -194,7 +180,7 @@ Tests & Qualité
 Tests Backend (Pytest)
 bash
 Copier le code
-cd backend
+cd bionexus-platform/backend
 pytest
 Tests Frontend (Jest / React Testing Library)
 bash

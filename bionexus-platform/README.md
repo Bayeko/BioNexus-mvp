@@ -36,3 +36,11 @@ Source code for the backend and frontend is mounted into the containers
 so that changes on the host trigger automatic reloads.  PostgreSQL data
 is stored in a named volume `postgres_data` to persist across runs.
 
+
+## Testing
+
+Run frontend unit tests from the `frontend` directory:
+
+```bash
+npm test
+```

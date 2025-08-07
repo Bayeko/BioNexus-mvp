@@ -26,3 +26,25 @@ jobs:
         working-directory: bionexus-platform/backend
         run: |
           pytest -q
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Cache frontend node modules
+        id: frontend-cache
+        uses: actions/cache@v3
+        with:
+          path: bionexus-platform/frontend/node_modules
+          key: ${{ runner.os }}-frontend-${{ hashFiles('bionexus-platform/frontend/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-frontend-
+
+      - name: Install frontend dependencies
+        if: steps.frontend-cache.outputs.cache-hit != 'true'
+        working-directory: bionexus-platform/frontend
+        run: npm ci
+
+      - name: Run frontend tests
+        working-directory: bionexus-platform/frontend
+        run: npm test

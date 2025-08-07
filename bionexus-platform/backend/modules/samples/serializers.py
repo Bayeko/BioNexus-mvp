@@ -8,4 +8,4 @@ class SampleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Sample
-        fields = "__all__"
+        fields = ["id", "name", "sample_type", "received_at", "location"]

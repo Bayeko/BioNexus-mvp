@@ -7,3 +7,7 @@ __pycache__/
 # Fichiers sensibles
 .env
 
+# Node build artifacts
+node_modules/
+dist/
+

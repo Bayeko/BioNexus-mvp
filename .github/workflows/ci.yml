@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Install dependencies
+      - name: Install pinned dependencies
         run: |
           pip install --upgrade pip
           pip install -r bionexus-platform/backend/requirements.txt

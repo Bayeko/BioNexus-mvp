@@ -1,3 +1,4 @@
+ codex/update-django-settings-for-development
 """Django settings for the BioNexus project."""
 
 from __future__ import annotations
@@ -29,11 +30,24 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+
+ codex/run-migrations-and-update-documentation
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+SECRET_KEY = "dummy-secret-key"
+
+INSTALLED_APPS = [
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+ main
     "rest_framework",
     "modules.samples",
     "modules.protocols",
 ]
 
+ codex/update-django-settings-for-development
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -66,6 +80,8 @@ WSGI_APPLICATION = "core.wsgi.application"
 
 
 # Database configuration
+
+ main
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -73,6 +89,7 @@ DATABASES = {
     }
 }
 
+ codex/update-django-settings-for-development
 
 # Django REST Framework configuration
 REST_FRAMEWORK = {
@@ -102,3 +119,28 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+SECRET_KEY = 'test-secret-key'
+
+INSTALLED_APPS = [
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'rest_framework',
+    'modules.samples',
+    'modules.protocols',
+]
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': ':memory:',
+    }
+}
+
+ROOT_URLCONF = 'core.urls'
+
+MIDDLEWARE = []
+ main
+ main

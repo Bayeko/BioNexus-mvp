@@ -20,8 +20,8 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r backend/requirements.txt
+          pip install -r bionexus-platform/backend/requirements.txt
 
       - name: Run tests
         run: |
-          pytest backend/
+          pytest bionexus-platform/backend/

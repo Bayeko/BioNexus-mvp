@@ -32,6 +32,7 @@ La structure proposée est la suivante :
 
 ```
 bionexus-mvp/
+ codex/clean-up-readme.md-for-coherence
  ├─ backend/
  │   ├─ bionexus/          # Code Django principal (settings, urls, etc.)
  │   ├─ apps/              # Modules spécifiques (ex : échantillons, protocoles)
@@ -42,6 +43,11 @@ bionexus-mvp/
  │   ├─ public/
  │   ├─ package.json
  │   └─ ...
+
+ ├─ bionexus-platform/
+ │   ├─ backend/          # Code Django principal (settings, urls, etc.)
+ │   └─ frontend/         # Code React
+ main
  ├─ docs/
  │   └─ ...               # Documentation fonctionnelle, specs, maquettes
  ├─ docker-compose.yml
@@ -50,7 +56,41 @@ bionexus-mvp/
  ├─ .gitignore
  ├─ README.md              # Ce fichier
  └─ ...
+ codex/clean-up-readme.md-for-coherence
 ```
+
+bionexus-platform/backend/ : Tout le code Python (Django), y compris la configuration DRF et le fichier requirements.txt.
+bionexus-platform/frontend/ : Code source React (ou TypeScript React), configurations Webpack/Vite, etc.
+docs/ : Documentation supplémentaire, cahier des charges, spécifications techniques ou fonctionnelles.
+docker-compose.yml : Orchestration des conteneurs (backend + base de données + frontend).
+
+
+Installation & Lancement (Local) 
+1. Cloner le Dépôt 
+git clone https://github.com/<votre-org-ou-utilisateur>/bionexus-mvp.git
+cd bionexus-mvp
+2. Configuration par Docker
+# Lancement simultané des conteneurs backend, frontend et db
+docker-compose up --build
+Backend sera accessible sur http://localhost:8000/.
+Frontend sera accessible sur http://localhost:3000/ (selon la configuration).
+Configuration "manuelle" (optionnelle) 
+a) Installation Backend (Django)
+cd bionexus-platform/backend
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+pip install -r requirements.txt
+python manage.py makemigrations samples protocols
+python manage.py migrate
+python manage.py runserver
+L’API se lancera par défaut sur http://127.0.0.1:8000.
+b) Installation Frontend (React)
+cd frontend
+npm install
+npm run start
+L’interface se lancera par défaut sur http://localhost:3000.
+
+ main
 
 - `backend/` : code Python (Django), configuration DRF et fichier `requirements.txt`.
 - `frontend/` : code source React (ou TypeScript React), configurations Webpack/Vite, etc.
@@ -59,8 +99,59 @@ bionexus-mvp/
 
 ## Installation & lancement (local)
 
+ codex/clean-up-readme.md-for-coherence
 ### 1. Cloner le dépôt
 ```bash
+
+Django (Python)
+Pour la rapidité de développement, la fiabilité du framework, et le support d’un ORM (Object-Relational Mapping) robuste.
+Django REST Framework (DRF)
+Pour exposer des API REST et gérer facilement l’authentification, la sérialisation et la pagination.
+PostgreSQL (Base de données relationnelle)
+Pour la fiabilité, la gestion des transactions, et les fonctionnalités avancées (index GIN, etc.).
+Frontend :
+
+React.js
+Bibliothèque populaire pour créer des interfaces utilisateur dynamiques.
+Possibilité d’utiliser Create React App ou Vite pour simplifier la configuration.
+TypeScript (optionnel)
+Recommandé pour une meilleure maintenabilité et détection des erreurs.
+Redux / React Query (optionnel)
+Pour la gestion d’état ou la gestion de cache et des requêtes API si l’application grandit rapidement.
+Infra & Outils DevOps :
+
+Docker et Docker Compose
+Permet de standardiser l’environnement (un conteneur pour Django/PostgreSQL, un conteneur pour React).
+GitHub Actions
+Mise en place d’une intégration continue (CI) : tests, lint, vérification des dépendances.
+Tests Unitaires & Intégration
+Pytest pour Python et Jest/React Testing Library pour le frontend.
+Organisation du Dépôt
+La structure proposée est la suivante :
+
+graphql
+Copier le code
+bionexus-mvp/
+ ├─ bionexus-platform/
+ │   ├─ backend/          # Code Django principal (settings, urls, etc.)
+ │   └─ frontend/         # Code React
+ ├─ docs/
+ │   └─ ...               # Documentation fonctionnelle, specs, maquettes
+ ├─ docker-compose.yml
+ ├─ .github/
+ │   └─ workflows/         # Configuration GitHub Actions (CI)
+ ├─ .gitignore
+ ├─ README.md              # Ce fichier
+ └─ ...
+bionexus-platform/backend/ : Tout le code Python (Django), y compris la configuration DRF et le fichier requirements.txt.
+bionexus-platform/frontend/ : Code source React (ou TypeScript React), configurations Webpack/Vite, etc.
+docs/ : Documentation supplémentaire, cahier des charges, spécifications techniques ou fonctionnelles.
+docker-compose.yml : Orchestration des conteneurs (backend + base de données + frontend).
+Installation & Lancement (Local)
+1. Cloner le Dépôt
+bash
+Copier le code
+ main
 git clone https://github.com/<votre-org-ou-utilisateur>/bionexus-mvp.git
 cd bionexus-mvp
 ```
@@ -69,6 +160,7 @@ cd bionexus-mvp
 ```bash
 # Lancement simultané des conteneurs backend, frontend et base de données
 docker-compose up --build
+ codex/clean-up-readme.md-for-coherence
 ```
 - Backend : http://localhost:8000/
 - Frontend : http://localhost:3000/ (selon la configuration)
@@ -78,9 +170,19 @@ docker-compose up --build
 #### a) Installation backend (Django)
 ```bash
 cd backend
+
+Backend sera accessible sur http://localhost:8000/.
+Frontend sera accessible sur http://localhost:3000/ (selon la configuration).
+3. Configuration “manuelle” (optionnelle)
+a) Installation Backend (Django)
+bash
+Copier le code
+cd bionexus-platform/backend
+ main
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
+python manage.py makemigrations samples protocols
 python manage.py migrate
 python manage.py runserver
 ```
@@ -91,8 +193,25 @@ L’API se lance par défaut sur http://127.0.0.1:8000.
 cd frontend
 npm install
 npm run start
+ codex/clean-up-readme.md-for-coherence
 ```
 L’interface se lance par défaut sur http://localhost:3000.
+
+L’interface se lancera par défaut sur http://localhost:3000.
+
+Tests & Qualité
+Tests Backend (Pytest)
+bash
+Copier le code
+cd bionexus-platform/backend
+pytest
+Tests Frontend (Jest / React Testing Library)
+bash
+Copier le code
+cd frontend
+npm run test
+Lint & Format
+ main
 
 ## Tests & qualité
 - **Backend** : depuis `backend/`, exécuter `pytest`.

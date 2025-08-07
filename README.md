@@ -1,141 +1,42 @@
-HEAD
-# Bionexus MVP
-=======
-# BioNexus
-Bienvenue dans le projet Bionexus MVP !
+# BioNexus MVP
+
+Bienvenue dans le projet BioNexus MVP !
+
 Ce dépôt contient la première version minimaliste (Minimum Viable Product) de la plateforme E-lab, visant à fournir les fonctionnalités essentielles pour la gestion d’échantillons, l’automatisation des protocoles et la collaboration en laboratoire.
 
-Objectif du Projet
-Créer une base solide pour la plateforme Bionexus : gestion des échantillons, protocoles de laboratoire, intégration avec les équipements, etc.
-Valider rapidement les concepts-clés et obtenir des retours précoces (feedback utilisateurs, équipe métier).
-Poser les fondations pour évoluer ultérieurement (analyses avancées, reporting, automatisation plus poussée, etc.).
-Stack Envisagée
-Backend :
+## Objectif du projet
+- Créer une base solide pour la plateforme BioNexus : gestion des échantillons, protocoles de laboratoire, intégration avec les équipements, etc.
+- Valider rapidement les concepts clés et obtenir des retours précoces (feedback utilisateurs, équipe métier).
+- Poser les fondations pour évoluer ultérieurement (analyses avancées, reporting, automatisation plus poussée, etc.).
 
-Django (Python)
-Pour la rapidité de développement, la fiabilité du framework, et le support d’un ORM (Object-Relational Mapping) robuste.
-Django REST Framework (DRF)
-Pour exposer des API REST et gérer facilement l’authentification, la sérialisation et la pagination.
-PostgreSQL (Base de données relationnelle)
-Pour la fiabilité, la gestion des transactions, et les fonctionnalités avancées (index GIN, etc.).
-Frontend :
+## Stack envisagée
 
-React.js
-Bibliothèque populaire pour créer des interfaces utilisateur dynamiques.
-Possibilité d’utiliser Create React App ou Vite pour simplifier la configuration.
-TypeScript (optionnel)
-Recommandé pour une meilleure maintenabilité et détection des erreurs.
-Redux / React Query (optionnel)
-Pour la gestion d’état ou la gestion de cache et des requêtes API si l’application grandit rapidement.
-Infra & Outils DevOps :
+### Backend
+- Django (Python) – rapidité de développement, fiabilité du framework et ORM robuste.
+- Django REST Framework (DRF) – exposition d’API REST et gestion de l’authentification, de la sérialisation et de la pagination.
+- PostgreSQL – base de données relationnelle fiable offrant des fonctionnalités avancées (index GIN, etc.).
 
-Docker et Docker Compose
-Permet de standardiser l’environnement (un conteneur pour Django/PostgreSQL, un conteneur pour React).
-GitHub Actions
-Mise en place d’une intégration continue (CI) : tests, lint, vérification des dépendances.
-Tests Unitaires & Intégration
-Pytest pour Python et Jest/React Testing Library pour le frontend.
+### Frontend
+- React.js – bibliothèque populaire pour des interfaces dynamiques.
+- Create React App ou Vite pour simplifier la configuration.
+- TypeScript (optionnel) – meilleure maintenabilité et détection des erreurs.
+- Redux / React Query (optionnel) – gestion d’état ou mise en cache des requêtes API si l’application grandit rapidement.
 
+### Infra & outils DevOps
+- Docker et Docker Compose pour standardiser l’environnement (conteneurs pour Django/PostgreSQL et pour React).
+- GitHub Actions pour l’intégration continue (tests, lint, vérification des dépendances).
+- Tests unitaires & d’intégration : Pytest pour Python et Jest/React Testing Library pour le frontend.
 
-Organisation dui Dépôt 
-La structure proposé est la suiivante :
-
-bionexus-mvp/
- ├─ backend/
- │   ├─ bionexus/          # Code Django principal (settings, urls, etc.)
- │   ├─ apps/              # Modules spécifiques (ex: echantillons, protocoles)
- │   ├─ requirements.txt   # Dépendances Python
- │   └─ ... 
- ├─ frontend/
- │   ├─ src/
- │   ├─ public/
- │   ├─ package.json
- │   └─ ...
- ├─ docs/
- │   └─ ...               # Documentation fonctionnelle, specs, maquettes
- ├─ docker-compose.yml
- ├─ .github/
- │   └─ workflows/         # Configuration GitHub Actions (CI)
- ├─ .gitignore
- ├─ README.md              # Ce fichier
- └─ ...
-backend/ : Tout le code Python (Django), y compris la configuration DRF et le fichier requirements.txt.
-frontend/ : Code source React (ou TypeScript React), configurations Webpack/Vite, etc.
-docs/ : Documentation supplémentaire, cahier des charges, spécifications techniques ou fonctionnelles.
-docker-compose.yml : Orchestration des conteneurs (backend + base de données + frontend).
-
-
-Installation & Lancement (Local) 
-1. Cloner le Dépôt 
-git clone https://github.com/<votre-org-ou-utilisateur>/bionexus-mvp.git
-cd bionexus-mvp
-2. Configuration par Docker
-# Lancement simultané des conteneurs backend, frontend et db
-docker-compose up --build
-Backend sera accessible sur http://localhost:8000/.
-Frontend sera accessible sur http://localhost:3000/ (selon la configuration).
-Configuration "manuelle" (optionnelle) 
-a) Installation Backend (Django)
-cd backend
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py runserver
-L’API se lancera par défaut sur http://127.0.0.1:8000.
-b) Installation Frontend (React)
-cd frontend
-npm install
-npm run start
-L’interface se lancera par défaut sur http://localhost:3000.
-
-
-Réflexion pendant quelques secondes
-Bionexus MVP – README
-Bienvenue dans le projet Bionexus MVP !
-Ce dépôt contient la première version minimaliste (Minimum Viable Product) de la plateforme E-lab, visant à fournir les fonctionnalités essentielles pour la gestion d’échantillons, l’automatisation des protocoles et la collaboration en laboratoire.
-
-Objectif du Projet
-Créer une base solide pour la plateforme Bionexus : gestion des échantillons, protocoles de laboratoire, intégration avec les équipements, etc.
-Valider rapidement les concepts-clés et obtenir des retours précoces (feedback utilisateurs, équipe métier).
-Poser les fondations pour évoluer ultérieurement (analyses avancées, reporting, automatisation plus poussée, etc.).
-Stack Envisagée
-Backend :
-
-Django (Python)
-Pour la rapidité de développement, la fiabilité du framework, et le support d’un ORM (Object-Relational Mapping) robuste.
-Django REST Framework (DRF)
-Pour exposer des API REST et gérer facilement l’authentification, la sérialisation et la pagination.
-PostgreSQL (Base de données relationnelle)
-Pour la fiabilité, la gestion des transactions, et les fonctionnalités avancées (index GIN, etc.).
-Frontend :
-
-React.js
-Bibliothèque populaire pour créer des interfaces utilisateur dynamiques.
-Possibilité d’utiliser Create React App ou Vite pour simplifier la configuration.
-TypeScript (optionnel)
-Recommandé pour une meilleure maintenabilité et détection des erreurs.
-Redux / React Query (optionnel)
-Pour la gestion d’état ou la gestion de cache et des requêtes API si l’application grandit rapidement.
-Infra & Outils DevOps :
-
-Docker et Docker Compose
-Permet de standardiser l’environnement (un conteneur pour Django/PostgreSQL, un conteneur pour React).
-GitHub Actions
-Mise en place d’une intégration continue (CI) : tests, lint, vérification des dépendances.
-Tests Unitaires & Intégration
-Pytest pour Python et Jest/React Testing Library pour le frontend.
-Organisation du Dépôt
+## Organisation du dépôt
 La structure proposée est la suivante :
 
-graphql
-Copier le code
+```
 bionexus-mvp/
  ├─ backend/
  │   ├─ bionexus/          # Code Django principal (settings, urls, etc.)
- │   ├─ apps/              # Modules spécifiques (ex: echantillons, protocoles)
+ │   ├─ apps/              # Modules spécifiques (ex : échantillons, protocoles)
  │   ├─ requirements.txt   # Dépendances Python
- │   └─ ... 
+ │   └─ ...
  ├─ frontend/
  │   ├─ src/
  │   ├─ public/
@@ -149,112 +50,68 @@ bionexus-mvp/
  ├─ .gitignore
  ├─ README.md              # Ce fichier
  └─ ...
-backend/ : Tout le code Python (Django), y compris la configuration DRF et le fichier requirements.txt.
-frontend/ : Code source React (ou TypeScript React), configurations Webpack/Vite, etc.
-docs/ : Documentation supplémentaire, cahier des charges, spécifications techniques ou fonctionnelles.
-docker-compose.yml : Orchestration des conteneurs (backend + base de données + frontend).
-Installation & Lancement (Local)
-1. Cloner le Dépôt
-bash
-Copier le code
+```
+
+- `backend/` : code Python (Django), configuration DRF et fichier `requirements.txt`.
+- `frontend/` : code source React (ou TypeScript React), configurations Webpack/Vite, etc.
+- `docs/` : documentation supplémentaire, cahier des charges, spécifications techniques ou fonctionnelles.
+- `docker-compose.yml` : orchestration des conteneurs (backend + base de données + frontend).
+
+## Installation & lancement (local)
+
+### 1. Cloner le dépôt
+```bash
 git clone https://github.com/<votre-org-ou-utilisateur>/bionexus-mvp.git
 cd bionexus-mvp
-2. Configuration par Docker
-Assurez-vous d’avoir Docker et Docker Compose installés.
+```
 
-bash
-Copier le code
-# Lancement simultané des conteneurs backend, frontend et db
+### 2. Configuration par Docker
+```bash
+# Lancement simultané des conteneurs backend, frontend et base de données
 docker-compose up --build
-Backend sera accessible sur http://localhost:8000/.
-Frontend sera accessible sur http://localhost:3000/ (selon la configuration).
-3. Configuration “manuelle” (optionnelle)
-a) Installation Backend (Django)
-bash
-Copier le code
+```
+- Backend : http://localhost:8000/
+- Frontend : http://localhost:3000/ (selon la configuration)
+
+### 3. Configuration manuelle (optionnelle)
+
+#### a) Installation backend (Django)
+```bash
 cd backend
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
 python manage.py migrate
 python manage.py runserver
-L’API se lancera par défaut sur http://127.0.0.1:8000.
+```
+L’API se lance par défaut sur http://127.0.0.1:8000.
 
-b) Installation Frontend (React)
-bash
-Copier le code
+#### b) Installation frontend (React)
+```bash
 cd frontend
 npm install
 npm run start
-L’interface se lancera par défaut sur http://localhost:3000.
+```
+L’interface se lance par défaut sur http://localhost:3000.
 
-Tests & Qualité
-Tests Backend (Pytest)
-bash
-Copier le code
-cd backend
-pytest
-Tests Frontend (Jest / React Testing Library)
-bash
-Copier le code
-cd frontend
-npm run test
-Lint & Format
+## Tests & qualité
+- **Backend** : depuis `backend/`, exécuter `pytest`.
+- **Frontend** : depuis `frontend/`, exécuter `npm test`.
 
-Python : flake8, black (selon votre configuration).
-JS/TS : ESLint, Prettier (ou autre).
-GitHub Actions CI
+## Contributions & workflow Git
+1. Créez une branche `feature/...` pour chaque fonctionnalité ou correctif.
+2. Soumettez une Pull Request vers `main` (ou `develop` si utilisée) avec une description concise.
+3. Assurez-vous que les tests passent avant de demander une relecture.
 
-À chaque commit/pull request, un pipeline va exécuter les tests pour vérifier la non-régression.
-Fonctionnalités MVP Ciblées
-Gestion des Échantillons
-Création, édition, suppression, stockage d’informations clés (type, date de réception, localisation, etc.).
-Automatisation/Protocole Minimal
-Possibilité d’ajouter un workflow ou un protocole simple pour valider la chaîne de traitement.
-Authentification & Sécurité
-Login / logout / gestion de rôles basiques.
-Vue Tableau de Bord
-Aperçu rapide des derniers échantillons ajoutés, notifications ou statut d’expérimentations.
-Note : Le plan d’extension intègre des modules plus complexes (analyse statistique avancée, reporting, intégration IoT, etc.) dans les versions ultérieures.
+## Roadmap & évolution
+- **Phase 1 (MVP)** : gestion des échantillons, authentification, premier protocole automatisé.
+- **Phase 2** : intégration des équipements, collaboration en temps réel.
+- **Phase 3** : analyses avancées, reporting réglementaire, optimisation des performances.
 
-Contributions & Workflow Git
-Branches
-
-main (ou master) : contient le code validé et stable.
-develop (optionnel) : branche d’intégration des fonctionnalités avant d’être mergées dans main.
-feature/... : branches dédiées à chaque fonctionnalité ou correctif.
-Pull Requests
-
-Créez une PR vers develop ou main avec un court descriptif.
-Assurez-vous que les tests passent et qu’aucun code smell n’est détecté avant de demander la review.
-Issues
-
-Utilisez la section Issues de GitHub pour décrire les user stories, bugs et améliorations.
-Roadmap & Évolution
-Phase 1 (MVP)
-Focus sur la gestion d’échantillons, authentification, un 1er protocole automatisé.
-Phase 2
-Intégration des équipements (API pour se connecter à des appareils de labo).
-Collaboration temps réel (chat, co-édition).
-Phase 3
-Analyse avancée (statistiques, IA/ML), reporting réglementaire (21 CFR Part 11, etc.).
-Optimisations performance, UI design avancé.
-Les jalons et sprints seront décrits dans le dossier docs/roadmap.md (à créer).
-
-Support et Contact
+## Support
 Pour toute question, suggestion ou rapport de bug :
+- Ouvrez une issue sur GitHub.
+- Contactez l’équipe par e-mail (ex. : support@bionexus.io).
 
-Ouvrez une Issue sur GitHub.
-Contactez l’équipe par email (ex. : support@bionexus.io ou autre).
-Licence (Éventuelle)
-(À définir selon votre choix, par ex. MIT, Apache 2.0, Proprietary, etc.)
-Exemple :
-
-c
-Copier le code
-MIT License
-
-Copyright (c) 2023 Bionexus
-
-Permission is hereby granted, free of charge...
->>>>>>> 1974a466bc4a52c9ae9a53f9a45785255575945f
+## Licence
+À définir (ex. : MIT, Apache 2.0, etc.).

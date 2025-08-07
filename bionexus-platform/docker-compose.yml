@@ -21,7 +21,13 @@ services:
     command: >-
       sh -c "pip install -r requirements.txt && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     environment:
+      DJANGO_SETTINGS_MODULE: core.settings
       DATABASE_URL: "${DATABASE_URL:-postgres://bionexus:bionexus@db:5432/bionexus}"
+      POSTGRES_DB: ${POSTGRES_DB:-bionexus}
+      POSTGRES_USER: ${POSTGRES_USER:-bionexus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bionexus}
+      DB_HOST: db
+      DB_PORT: 5432
     ports:
       - "8000:8000"
     depends_on:

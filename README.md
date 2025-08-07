@@ -1,33 +1,33 @@
 # BioNexus MVP
 
-Bienvenue dans le projet BioNexus MVP !
+Bienvenue dans le projet BioNexus MVP !
 
-Ce dépôt contient la première version minimaliste (Minimum Viable Product) de la plateforme E-lab, visant à fournir les fonctionnalités essentielles pour la gestion d’échantillons, l’automatisation des protocoles et la collaboration en laboratoire.
+Ce dépôt contient la première version minimaliste de la plateforme E‑lab. Le but est de fournir les fonctionnalités essentielles pour la gestion d'échantillons, l'automatisation des protocoles et la collaboration en laboratoire.
 
 ## Objectif du projet
-- Créer une base solide pour la plateforme BioNexus : gestion des échantillons, protocoles de laboratoire, intégration avec les équipements, etc.
-- Valider rapidement les concepts clés et obtenir des retours précoces (feedback utilisateurs, équipe métier).
-- Poser les fondations pour évoluer ultérieurement (analyses avancées, reporting, automatisation plus poussée, etc.).
+
+- Créer une base solide pour la plateforme BioNexus.
+- Valider rapidement les concepts clés et obtenir des retours précoces.
+- Poser les fondations pour évoluer ultérieurement.
 
 ## Stack envisagée
 
 ### Backend
-- Django (Python) – rapidité de développement, fiabilité du framework et ORM robuste.
-- Django REST Framework (DRF) – exposition d’API REST et gestion de l’authentification, de la sérialisation et de la pagination.
-- PostgreSQL – base de données relationnelle fiable offrant des fonctionnalités avancées (index GIN, etc.).
+- Django & Django REST Framework
+- PostgreSQL
 
 ### Frontend
-- React.js – bibliothèque populaire pour des interfaces dynamiques.
-- Create React App ou Vite pour simplifier la configuration.
-- TypeScript (optionnel) – meilleure maintenabilité et détection des erreurs.
-- Redux / React Query (optionnel) – gestion d’état ou mise en cache des requêtes API si l’application grandit rapidement.
+- React.js
+- Vite ou Create React App
+- TypeScript (optionnel)
 
 ### Infra & outils DevOps
-- Docker et Docker Compose pour standardiser l’environnement (conteneurs pour Django/PostgreSQL et pour React).
-- GitHub Actions pour l’intégration continue (tests, lint, vérification des dépendances).
-- Tests unitaires & d’intégration : Pytest pour Python et Jest/React Testing Library pour le frontend.
+- Docker & Docker Compose
+- GitHub Actions
+- Pytest & Jest/React Testing Library
 
 ## Organisation du dépôt
+ codex/clean-up-readme.md-sections
 ```
 bionexus-mvp/
 ├─ bionexus-platform/
@@ -39,10 +39,22 @@ bionexus-mvp/
 ├─ .gitignore
 ├─ README.md            # Ce fichier
 └─ ...
+
+
+```
+bionexus-mvp/
+├── bionexus-platform/
+│   ├── backend/   # Code Django principal
+│   └── frontend/  # Code React
+├── .github/       # Workflows CI
+├── conftest.py    # Configuration tests backend
+└── README.md
+ main
 ```
 
 ## Installation & lancement (local)
 
+ codex/clean-up-readme.md-sections
 ### 1. Cloner le dépôt
 ```bash
 git clone https://github.com/<votre-org-ou-utilisateur>/bionexus-mvp.git
@@ -52,51 +64,81 @@ cd bionexus-mvp
 ### 2. Configuration par Docker
 ```bash
 docker-compose up --build
+
+### 1. Via Docker
+
+ main
 ```
-- Backend : http://localhost:8000/
-- Frontend : http://localhost:3000/ (selon la configuration)
+cd bionexus-platform
+docker compose up --build
+```
 
-### 3. Configuration manuelle (optionnelle)
+- Backend : <http://localhost:8000/>
+- Frontend : <http://localhost:3000/>
 
+### 2. Installation manuelle (optionnelle)
+
+ codex/clean-up-readme.md-sections
 #### a) Installation backend (Django)
 ```bash
+
+#### Backend
+
+```
+ main
 cd bionexus-platform/backend
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
+source venv/bin/activate
 pip install -r requirements.txt
-python manage.py makemigrations samples protocols
 python manage.py migrate
 python manage.py runserver
 ```
+ codex/clean-up-readme.md-sections
 L’API se lancera par défaut sur http://127.0.0.1:8000/.
 
 #### b) Installation frontend (React)
 ```bash
+
+
+L’API se lance sur <http://127.0.0.1:8000/>.
+
+#### Frontend
+
+```
+ main
 cd bionexus-platform/frontend
 npm install
 npm run start
 ```
+ codex/clean-up-readme.md-sections
 L’interface se lancera par défaut sur http://localhost:3000/.
 
 ## Tests & qualité
 - **Backend** : depuis `bionexus-platform/backend`, exécuter `pytest`.
 - **Frontend** : depuis `bionexus-platform/frontend`, exécuter `npm test`.
 
+
+L’interface se lance sur <http://localhost:3000/>.
+
+## Tests & qualité
+
+- Backend : depuis `bionexus-platform/backend`, exécuter `pytest`.
+- Frontend : depuis `bionexus-platform/frontend`, exécuter `npm test`.
+ main
+
 ## Contributions & workflow Git
+
 1. Créez une branche `feature/...` pour chaque fonctionnalité ou correctif.
-2. Soumettez une Pull Request vers `main` (ou `develop` si utilisée) avec une description concise.
+2. Soumettez une Pull Request vers `main` avec une description concise.
 3. Assurez-vous que les tests passent avant de demander une relecture.
 
-## Roadmap & évolution
-- **Phase 1 (MVP)** : gestion des échantillons, authentification, premier protocole automatisé.
-- **Phase 2** : intégration des équipements, collaboration en temps réel.
-- **Phase 3** : analyses avancées, reporting réglementaire, optimisation des performances.
+## Licence
 
-## Support
-Pour toute question, suggestion ou rapport de bug :
-- Ouvrez une issue sur GitHub.
-- Contactez l’équipe par e-mail (ex. : support@bionexus.io).
+À définir (ex. : MIT, Apache 2.0, etc.).
 
+ codex/clean-up-readme.md-sections
 ## Licence
 À définir (ex. : MIT, Apache 2.0, etc.).
 
+
+ main

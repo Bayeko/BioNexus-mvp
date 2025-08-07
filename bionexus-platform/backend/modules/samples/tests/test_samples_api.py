@@ -21,6 +21,10 @@ class SampleAPITest(TestCase):
         self.assertEqual(response.status_code, 201)
         sample_id = response.data["id"]
 
+        list_resp = self.client.get("/api/samples/")
+        self.assertEqual(list_resp.status_code, 200)
+        self.assertTrue(any(s["id"] == sample_id for s in list_resp.data))
+
         response = self.client.get(f"/api/samples/{sample_id}/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["name"], "Sample A")
@@ -36,3 +40,6 @@ class SampleAPITest(TestCase):
         self.assertEqual(
             self.client.get(f"/api/samples/{sample_id}/").status_code, 404
         )
+
+        list_resp = self.client.get("/api/samples/")
+        self.assertFalse(any(s["id"] == sample_id for s in list_resp.data))

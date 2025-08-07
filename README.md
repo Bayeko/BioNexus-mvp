@@ -80,6 +80,7 @@ cd backend
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
+python manage.py makemigrations samples protocols
 python manage.py migrate
 python manage.py runserver
 L’API se lancera par défaut sur http://127.0.0.1:8000.
@@ -176,6 +177,7 @@ cd backend
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
+python manage.py makemigrations samples protocols
 python manage.py migrate
 python manage.py runserver
 L’API se lancera par défaut sur http://127.0.0.1:8000.

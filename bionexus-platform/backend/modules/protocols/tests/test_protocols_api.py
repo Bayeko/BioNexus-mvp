@@ -19,6 +19,10 @@ class ProtocolAPITest(TestCase):
         self.assertEqual(response.status_code, 201)
         protocol_id = response.data["id"]
 
+        list_resp = self.client.get("/api/protocols/")
+        self.assertEqual(list_resp.status_code, 200)
+        self.assertTrue(any(p["id"] == protocol_id for p in list_resp.data))
+
         response = self.client.get(f"/api/protocols/{protocol_id}/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["title"], "DNA Extraction")
@@ -34,3 +38,6 @@ class ProtocolAPITest(TestCase):
         self.assertEqual(
             self.client.get(f"/api/protocols/{protocol_id}/").status_code, 404
         )
+
+        list_resp = self.client.get("/api/protocols/")
+        self.assertFalse(any(p["id"] == protocol_id for p in list_resp.data))

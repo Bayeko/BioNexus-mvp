@@ -27,6 +27,19 @@ Ce dépôt contient la première version minimaliste de la plateforme E‑lab. L
 - Pytest & Jest/React Testing Library
 
 ## Organisation du dépôt
+ codex/clean-up-readme.md-sections
+```
+bionexus-mvp/
+├─ bionexus-platform/
+│  ├─ backend/          # Code Django principal (settings, urls, etc.)
+│  └─ frontend/         # Code React
+├─ docs/                # Documentation fonctionnelle, specs, maquettes
+├─ docker-compose.yml
+├─ .github/             # Configuration GitHub Actions (CI)
+├─ .gitignore
+├─ README.md            # Ce fichier
+└─ ...
+
 
 ```
 bionexus-mvp/
@@ -36,12 +49,25 @@ bionexus-mvp/
 ├── .github/       # Workflows CI
 ├── conftest.py    # Configuration tests backend
 └── README.md
+ main
 ```
 
 ## Installation & lancement (local)
 
+ codex/clean-up-readme.md-sections
+### 1. Cloner le dépôt
+```bash
+git clone https://github.com/<votre-org-ou-utilisateur>/bionexus-mvp.git
+cd bionexus-mvp
+```
+
+### 2. Configuration par Docker
+```bash
+docker-compose up --build
+
 ### 1. Via Docker
 
+ main
 ```
 cd bionexus-platform
 docker compose up --build
@@ -52,9 +78,14 @@ docker compose up --build
 
 ### 2. Installation manuelle (optionnelle)
 
+ codex/clean-up-readme.md-sections
+#### a) Installation backend (Django)
+```bash
+
 #### Backend
 
 ```
+ main
 cd bionexus-platform/backend
 python -m venv venv
 source venv/bin/activate
@@ -62,16 +93,30 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py runserver
 ```
+ codex/clean-up-readme.md-sections
+L’API se lancera par défaut sur http://127.0.0.1:8000/.
+
+#### b) Installation frontend (React)
+```bash
+
 
 L’API se lance sur <http://127.0.0.1:8000/>.
 
 #### Frontend
 
 ```
+ main
 cd bionexus-platform/frontend
 npm install
 npm run start
 ```
+ codex/clean-up-readme.md-sections
+L’interface se lancera par défaut sur http://localhost:3000/.
+
+## Tests & qualité
+- **Backend** : depuis `bionexus-platform/backend`, exécuter `pytest`.
+- **Frontend** : depuis `bionexus-platform/frontend`, exécuter `npm test`.
+
 
 L’interface se lance sur <http://localhost:3000/>.
 
@@ -79,6 +124,7 @@ L’interface se lance sur <http://localhost:3000/>.
 
 - Backend : depuis `bionexus-platform/backend`, exécuter `pytest`.
 - Frontend : depuis `bionexus-platform/frontend`, exécuter `npm test`.
+ main
 
 ## Contributions & workflow Git
 
@@ -90,3 +136,9 @@ L’interface se lance sur <http://localhost:3000/>.
 
 À définir (ex. : MIT, Apache 2.0, etc.).
 
+ codex/clean-up-readme.md-sections
+## Licence
+À définir (ex. : MIT, Apache 2.0, etc.).
+
+
+ main

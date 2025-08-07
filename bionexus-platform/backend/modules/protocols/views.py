@@ -1,14 +1,7 @@
-from rest_framework import serializers, viewsets
+from rest_framework import viewsets
 
 from .models import Protocol
-
-
-class ProtocolSerializer(serializers.ModelSerializer):
-    """Serializer for the Protocol model."""
-
-    class Meta:
-        model = Protocol
-        fields = ["id", "title", "description", "steps"]
+from .serializers import ProtocolSerializer
 
 
 class ProtocolViewSet(viewsets.ModelViewSet):

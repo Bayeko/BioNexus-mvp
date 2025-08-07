@@ -12,7 +12,7 @@ class SampleAPITest(TestCase):
     def test_sample_crud_operations(self):
         payload = {
             "name": "Sample A",
-            "type": "blood",
+            "sample_type": "blood",
             "received_at": timezone.now().isoformat(),
             "location": "Freezer 1",
         }

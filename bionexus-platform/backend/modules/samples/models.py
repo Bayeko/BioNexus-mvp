@@ -5,7 +5,7 @@ class Sample(models.Model):
     """Model representing a biological sample."""
 
     name = models.CharField(max_length=255)
-    type = models.CharField(max_length=100)
+    sample_type = models.CharField(max_length=100)
     received_at = models.DateTimeField()
     location = models.CharField(max_length=255)
 

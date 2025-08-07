@@ -16,7 +16,14 @@ overriding them when running `docker compose`.
 | `POSTGRES_PASSWORD` | database password | `bionexus` |
 | `POSTGRES_DB` | database name | `bionexus` |
 | `DATABASE_URL` | connection string used by Django | `postgres://bionexus:bionexus@db:5432/bionexus` |
+| `DJANGO_SECRET_KEY` | secret key used by Django | `dev-secret-key` |
+| `DJANGO_DEBUG` | enable debug mode (`true`/`false`) | `true` |
+| `DJANGO_ALLOWED_HOSTS` | comma separated hostnames Django can serve | `localhost,127.0.0.1,testserver` |
 | `CHOKIDAR_USEPOLLING` | enables reliable hot reloading for the frontend inside Docker | `true` |
+
+These variables override the defaults defined in `core/settings.py` and
+can be placed in a `.env` file or exported in your shell before
+starting the services.
 
 ## Usage
 

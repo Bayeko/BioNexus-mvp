@@ -824,14 +824,106 @@ class Equipment(models.Model):
         return f"{self.equipment_name} ({self.equipment_type})"
 
 
-    def reject(self, user: User, notes: str):
-        """Mark parsing as rejected by human."""
-        self.state = self.REJECTED
-        self.validated_by = user
-        self.validated_at = timezone.now()
-        self.validation_notes = notes
-        self.save(update_fields=[
-            "state", "validated_by", "validated_at",
-            "validation_notes"
-        ])
+class CertifiedReport(models.Model):
+    """Certified data export with chain integrity verification.
+
+    This is the document that clients present to auditors. It includes:
+    - Complete execution history with all linked data
+    - Audit trail summary showing all modifications
+    - SHA-256 hash chain verification proof
+    - Signature from technician who certified it
+
+    CRITICAL: Report is NOT generated if audit chain is corrupted.
+    """
+
+    # STATES
+    PENDING = "pending"
+    CERTIFIED = "certified"
+    REVOKED = "revoked"
+    STATE_CHOICES = [
+        (PENDING, "Pending Certification"),
+        (CERTIFIED, "Certified & Auditable"),
+        (REVOKED, "Revoked (chain corrupted)"),
+    ]
+
+    # DATA
+    tenant = models.ForeignKey(
+        "Tenant",
+        on_delete=models.CASCADE,
+        related_name="certified_reports",
+        help_text="Lab that generated this report",
+    )
+    execution_log = models.ForeignKey(
+        ExecutionLog,
+        on_delete=models.CASCADE,
+        related_name="certified_reports",
+        help_text="Protocol execution this report documents",
+    )
+
+    # CERTIFICATION
+    certified_by = models.ForeignKey(
+        "User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="certified_reports",
+        help_text="Technician/QA who certified this report",
+    )
+    certified_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When report was certified",
+    )
+
+    # INTEGRITY
+    report_hash = models.CharField(
+        max_length=64,
+        unique=True,
+        db_index=True,
+        help_text="SHA-256 hash of PDF content (proof of originality)",
+    )
+    chain_integrity_verified = models.BooleanField(
+        default=False,
+        help_text="Was audit chain verified before generation?",
+    )
+    chain_verification_details = models.JSONField(
+        default=dict,
+        help_text="Verification results: {total_records, verified, corrupted}",
+    )
+
+    # STORAGE
+    pdf_filename = models.CharField(
+        max_length=255,
+        help_text="Filename of certified PDF report",
+    )
+    pdf_size = models.BigIntegerField(
+        help_text="Size of PDF in bytes",
+    )
+
+    # STATE
+    state = models.CharField(
+        max_length=20,
+        choices=STATE_CHOICES,
+        default=PENDING,
+        db_index=True,
+        help_text="Certification state",
+    )
+    revocation_reason = models.TextField(
+        blank=True,
+        help_text="Reason for revocation if chain corrupted",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "core"
+        indexes = [
+            models.Index(fields=["tenant", "state"]),
+            models.Index(fields=["execution_log", "state"]),
+        ]
+        ordering = ["-certified_at"]
+
+    def __str__(self) -> str:
+        return f"Report {self.id}: {self.execution_log.protocol} ({self.state})"
 

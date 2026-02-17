@@ -10,7 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # --- Core Django settings -------------------------------------------------
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-secret-key")
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-secret-key-change-in-production")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() == "true"
@@ -19,6 +19,17 @@ _allowed_hosts = os.environ.get(
     "DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver"
 )
 ALLOWED_HOSTS = [host for host in _allowed_hosts.split(",") if host]
+
+
+# --- Authentication -------------------------------------------------------
+
+# Use custom User model with tenant isolation
+AUTH_USER_MODEL = "core.User"
+
+# JWT configuration
+JWT_ALGORITHM = "HS256"
+JWT_ACCESS_TOKEN_LIFETIME = 15  # minutes
+JWT_REFRESH_TOKEN_LIFETIME = 7  # days
 
 
 # Application definition

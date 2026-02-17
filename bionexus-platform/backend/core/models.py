@@ -170,3 +170,218 @@ class AuditLog(models.Model):
         if not hasattr(self, "_skip_validation"):
             self.clean()
         super().save(*args, **kwargs)
+
+
+# --- Authentication & Authorization ------------------------------------------
+
+
+class Tenant(models.Model):
+    """Represents a laboratory or organization (multi-tenant isolation)."""
+
+    name = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text="Laboratory or organization name",
+    )
+    slug = models.SlugField(
+        unique=True,
+        help_text="URL-safe identifier for the tenant",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Organizational description",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Inactive tenants are soft-deleted",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "core"
+        ordering = ["name"]
+        verbose_name = "Tenant (Laboratory)"
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Role(models.Model):
+    """Role-based access control roles."""
+
+    # Standard roles for lab environments
+    ADMIN = "admin"
+    PRINCIPAL_INVESTIGATOR = "principal_investigator"
+    LAB_TECHNICIAN = "lab_technician"
+    AUDITOR = "auditor"
+    VIEWER = "viewer"
+
+    ROLE_CHOICES = [
+        (ADMIN, "Administrator"),
+        (PRINCIPAL_INVESTIGATOR, "Principal Investigator"),
+        (LAB_TECHNICIAN, "Lab Technician"),
+        (AUDITOR, "Auditor (Read-only)"),
+        (VIEWER, "Viewer (Read-only)"),
+    ]
+
+    name = models.CharField(
+        max_length=50,
+        choices=ROLE_CHOICES,
+        unique=True,
+        help_text="Standardized role name",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of role responsibilities",
+    )
+
+    class Meta:
+        app_label = "core"
+        ordering = ["name"]
+        verbose_name = "Role"
+
+    def __str__(self) -> str:
+        return self.get_name_display()
+
+
+class Permission(models.Model):
+    """Fine-grained permissions for operations."""
+
+    # Samples operations
+    SAMPLE_VIEW = "sample:view"
+    SAMPLE_CREATE = "sample:create"
+    SAMPLE_UPDATE = "sample:update"
+    SAMPLE_DELETE = "sample:delete"
+
+    # Protocols operations
+    PROTOCOL_VIEW = "protocol:view"
+    PROTOCOL_CREATE = "protocol:create"
+    PROTOCOL_UPDATE = "protocol:update"
+    PROTOCOL_DELETE = "protocol:delete"
+
+    # Audit operations
+    AUDIT_VIEW = "audit:view"
+    AUDIT_EXPORT = "audit:export"
+
+    # User management
+    USER_MANAGE = "user:manage"
+    ROLE_MANAGE = "role:manage"
+
+    PERMISSION_CHOICES = [
+        (SAMPLE_VIEW, "View samples"),
+        (SAMPLE_CREATE, "Create samples"),
+        (SAMPLE_UPDATE, "Update samples"),
+        (SAMPLE_DELETE, "Delete samples"),
+        (PROTOCOL_VIEW, "View protocols"),
+        (PROTOCOL_CREATE, "Create protocols"),
+        (PROTOCOL_UPDATE, "Update protocols"),
+        (PROTOCOL_DELETE, "Delete protocols"),
+        (AUDIT_VIEW, "View audit logs"),
+        (AUDIT_EXPORT, "Export audit logs"),
+        (USER_MANAGE, "Manage users"),
+        (ROLE_MANAGE, "Manage roles"),
+    ]
+
+    codename = models.CharField(
+        max_length=100,
+        choices=PERMISSION_CHOICES,
+        unique=True,
+        help_text="Machine-readable permission identifier",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Human-readable description",
+    )
+
+    class Meta:
+        app_label = "core"
+        ordering = ["codename"]
+        verbose_name = "Permission"
+
+    def __str__(self) -> str:
+        return self.get_codename_display()
+
+
+class RolePermission(models.Model):
+    """Mapping between roles and permissions (RBAC matrix)."""
+
+    role = models.ForeignKey(
+        Role,
+        on_delete=models.CASCADE,
+        related_name="permissions_set",
+    )
+    permission = models.ForeignKey(
+        Permission,
+        on_delete=models.CASCADE,
+        related_name="roles_with_permission",
+    )
+
+    class Meta:
+        app_label = "core"
+        unique_together = ("role", "permission")
+        verbose_name = "Role Permission"
+
+    def __str__(self) -> str:
+        return f"{self.role.name} -> {self.permission.codename}"
+
+
+from django.contrib.auth.models import AbstractUser
+
+
+class User(AbstractUser):
+    """Custom user model with tenant isolation."""
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="users",
+        help_text="The tenant (laboratory) this user belongs to",
+    )
+    role = models.ForeignKey(
+        Role,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="users",
+        help_text="The role assigned to this user",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Inactive users cannot log in",
+    )
+    last_login_ip = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        help_text="IP address of last successful login (for audit)",
+    )
+    last_login_user_agent = models.TextField(
+        blank=True,
+        help_text="User agent of last login (for audit)",
+    )
+
+    class Meta:
+        app_label = "core"
+        unique_together = ("tenant", "username")
+        verbose_name = "User"
+
+    def __str__(self) -> str:
+        return f"{self.username} ({self.tenant.name})"
+
+    def has_permission(self, permission_codename: str) -> bool:
+        """Check if user has a specific permission."""
+        if not self.is_active or not self.role:
+            return False
+        return self.role.permissions_set.filter(
+            permission__codename=permission_codename
+        ).exists()
+
+    def get_permissions(self) -> list[str]:
+        """Get all permissions for this user."""
+        if not self.role:
+            return []
+        return list(
+            self.role.permissions_set.values_list(
+                "permission__codename", flat=True
+            )
+        )

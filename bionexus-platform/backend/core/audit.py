@@ -23,34 +23,38 @@ class AuditTrail:
         changes: dict[str, Any],
         snapshot_before: dict[str, Any],
         snapshot_after: dict[str, Any],
-        user_id: int | None = None,
-        user_email: str | None = None,
+        user_id: int,
+        user_email: str,
     ) -> AuditLog:
         """Record a mutation in the audit trail with signature.
 
-        This method:
-        1. Fetches the last audit record for this entity type
-        2. Calculates the new signature (chaining to previous)
-        3. Creates an immutable AuditLog record
-        4. Returns the audit log for reference
+        User identification is MANDATORY (21 CFR Part 11 requirement).
 
         Args:
             entity_type: Name of the model (e.g., 'Sample', 'Protocol')
             entity_id: Primary key of the affected entity
             operation: 'CREATE', 'UPDATE', or 'DELETE'
-            changes: Dict of field changes, e.g.,
-                     {'name': {'before': 'Old', 'after': 'New'}}
-            snapshot_before: Complete entity state before mutation (for forensics)
+            changes: Dict of field changes
+            snapshot_before: Complete entity state before mutation
             snapshot_after: Complete entity state after mutation
-            user_id: ID of the user who triggered the mutation (optional for MVP)
-            user_email: Email of the user (optional for MVP)
+            user_id: ID of the AUTHENTICATED user (mandatory, not optional)
+            user_email: Email of the user (mandatory for audit trail)
 
         Returns:
             AuditLog: The immutable audit record just created
 
         Raises:
-            ValueError: If signature validation fails
+            ValueError: If user_id or user_email is missing
         """
+        if not user_id:
+            raise ValueError(
+                "user_id is mandatory for audit trail (21 CFR Part 11). "
+                "All operations must be performed by authenticated users."
+            )
+        if not user_email:
+            raise ValueError(
+                "user_email is mandatory for audit trail (21 CFR Part 11)."
+            )
         with transaction.atomic():
             from django.utils import timezone
 

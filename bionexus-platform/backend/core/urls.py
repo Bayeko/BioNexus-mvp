@@ -5,7 +5,7 @@ from modules.samples.views import SampleViewSet
 from modules.protocols.views import ProtocolViewSet
 
 router = DefaultRouter()
-router.register(r"samples", SampleViewSet)
+router.register(r"samples", SampleViewSet, basename="sample")
 router.register(r"protocols", ProtocolViewSet, basename="protocol")
 
 urlpatterns = [

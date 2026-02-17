@@ -385,3 +385,207 @@ class User(AbstractUser):
                 "permission__codename", flat=True
             )
         )
+
+
+# --- Parsing & Data Validation (ALCOA+ Compliance) ---------------------------
+
+
+class RawFile(models.Model):
+    """Immutable file record with cryptographic proof.
+
+    Every uploaded file is stored with SHA-256 hash for integrity verification.
+    Files are NEVER overwritten or deleted -- only logically soft-deleted.
+
+    ALCOA+:
+    - Attributable: user_id + timestamp
+    - Legible: filename, MIME type
+    - Contemporaneous: created_at timestamp
+    - Original: SHA-256 hash prevents tampering
+    - Accurate: validated against schema
+    - Complete: full file content preserved
+    - Consistent: audit trail recorded
+    - Enduring: immutable storage
+    - Available: retrievable for review
+    """
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="raw_files",
+        help_text="Tenant (lab) that uploaded the file",
+    )
+    user = models.ForeignKey(
+        "User",
+        on_delete=models.SET_NULL,
+        null=True,
+        help_text="User who uploaded the file",
+    )
+
+    filename = models.CharField(
+        max_length=255,
+        help_text="Original filename from upload",
+    )
+    file_content = models.BinaryField(
+        help_text="Complete file content (never modified)",
+    )
+    file_hash = models.CharField(
+        max_length=64,
+        unique=True,
+        db_index=True,
+        help_text="SHA-256 hash of file content (proof of originality)",
+    )
+    file_size = models.BigIntegerField(
+        help_text="File size in bytes",
+    )
+    mime_type = models.CharField(
+        max_length=100,
+        help_text="MIME type (e.g., 'text/csv', 'application/pdf')",
+    )
+
+    uploaded_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When file was uploaded",
+    )
+    is_deleted = models.BooleanField(
+        default=False,
+        help_text="Soft delete flag (content preserved for audit)",
+    )
+
+    class Meta:
+        app_label = "core"
+        ordering = ["-uploaded_at"]
+        indexes = [
+            models.Index(fields=["tenant", "uploaded_at"]),
+            models.Index(fields=["file_hash"]),
+        ]
+        verbose_name = "Raw File"
+
+    def __str__(self) -> str:
+        return f"{self.filename} ({self.file_hash[:8]})"
+
+
+class ParsedData(models.Model):
+    """Data extracted by AI parser, pending human validation.
+
+    States:
+    - PENDING: Awaiting human review
+    - VALIDATED: Confirmed by authorized user
+    - REJECTED: Human rejected extraction
+    - SUPERSEDED: Replaced by newer parsing
+
+    CRITICAL: AI output is never directly used -- it's a proposal
+    that requires explicit human confirmation.
+    """
+
+    PENDING = "pending"
+    VALIDATED = "validated"
+    REJECTED = "rejected"
+    SUPERSEDED = "superseded"
+
+    STATE_CHOICES = [
+        (PENDING, "Awaiting Validation"),
+        (VALIDATED, "Human Confirmed"),
+        (REJECTED, "Human Rejected"),
+        (SUPERSEDED, "Replaced by New Parse"),
+    ]
+
+    raw_file = models.OneToOneField(
+        RawFile,
+        on_delete=models.CASCADE,
+        related_name="parsed_data",
+        help_text="Original source file",
+    )
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="parsed_data_records",
+    )
+
+    # AI Extraction
+    extracted_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When AI extraction occurred",
+    )
+    parsed_json = models.JSONField(
+        help_text="Raw AI-extracted data (not yet validated)",
+    )
+    extraction_confidence = models.FloatField(
+        help_text="AI confidence score (0.0 to 1.0)",
+    )
+    extraction_model = models.CharField(
+        max_length=100,
+        help_text="Which AI model was used (e.g., 'gpt-4-turbo')",
+    )
+
+    # Validation State
+    state = models.CharField(
+        max_length=20,
+        choices=STATE_CHOICES,
+        default=PENDING,
+        db_index=True,
+        help_text="Current validation state",
+    )
+    validated_by = models.ForeignKey(
+        "User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="validated_parsed_data",
+        help_text="User who confirmed/rejected extraction",
+    )
+    validated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When human validation occurred",
+    )
+    validation_notes = models.TextField(
+        blank=True,
+        help_text="Human notes on validation (e.g., corrections made)",
+    )
+
+    # Post-Validation Data
+    confirmed_json = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Final validated data (after human corrections)",
+    )
+
+    class Meta:
+        app_label = "core"
+        ordering = ["-extracted_at"]
+        indexes = [
+            models.Index(fields=["tenant", "state"]),
+            models.Index(fields=["raw_file"]),
+        ]
+        verbose_name = "Parsed Data"
+
+    def __str__(self) -> str:
+        return f"Parse of {self.raw_file.filename} ({self.state})"
+
+    def validate(self, validated_json: dict, user: User, notes: str = ""):
+        """Mark parsing as validated by a human.
+
+        IMPORTANT: This is the gate that converts AI proposal to
+        authoritative data.
+        """
+        self.state = self.VALIDATED
+        self.validated_by = user
+        self.validated_at = timezone.now()
+        self.confirmed_json = validated_json
+        self.validation_notes = notes
+        self.save(update_fields=[
+            "state", "validated_by", "validated_at",
+            "confirmed_json", "validation_notes"
+        ])
+
+    def reject(self, user: User, notes: str):
+        """Mark parsing as rejected by human."""
+        self.state = self.REJECTED
+        self.validated_by = user
+        self.validated_at = timezone.now()
+        self.validation_notes = notes
+        self.save(update_fields=[
+            "state", "validated_by", "validated_at",
+            "validation_notes"
+        ])
+

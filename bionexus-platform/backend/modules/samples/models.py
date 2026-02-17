@@ -28,6 +28,7 @@ class Sample(models.Model):
     )
 
     class Meta:
+        app_label = "samples"
         indexes = [
             models.Index(fields=["is_deleted", "id"]),
         ]

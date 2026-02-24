@@ -16,6 +16,7 @@ import hashlib
 import json
 from datetime import datetime
 
+from django.conf import settings
 from django.db import models
 
 
@@ -415,7 +416,7 @@ class RawFile(models.Model):
         help_text="Tenant (lab) that uploaded the file",
     )
     user = models.ForeignKey(
-        "User",
+        settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         help_text="User who uploaded the file",
@@ -526,7 +527,7 @@ class ParsedData(models.Model):
         help_text="Current validation state",
     )
     validated_by = models.ForeignKey(
-        "User",
+        settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -624,14 +625,14 @@ class ExecutionLog(models.Model):
         help_text="Equipment used (Hamilton robot, spectrophotometer, etc.)",
     )
     started_by = models.ForeignKey(
-        "User",
+        settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         related_name="started_executions",
         help_text="Technician who started execution",
     )
     validated_by = models.ForeignKey(
-        "User",
+        settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -862,7 +863,7 @@ class CertifiedReport(models.Model):
 
     # CERTIFICATION
     certified_by = models.ForeignKey(
-        "User",
+        settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

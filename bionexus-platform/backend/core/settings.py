@@ -34,14 +34,14 @@ JWT_REFRESH_TOKEN_LIFETIME = 7  # days
 
 # Application definition
 INSTALLED_APPS = [
-    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
-    "core",
+    "core",  # Must come before django.contrib.admin (uses custom AUTH_USER_MODEL)
+    "django.contrib.admin",
     "modules.samples",
     "modules.protocols",
 ]

@@ -427,7 +427,9 @@ class RawFile(models.Model):
         help_text="Original filename from upload",
     )
     file_content = models.BinaryField(
-        help_text="Complete file content (never modified)",
+        null=True,
+        blank=True,
+        help_text="File content for local storage (null when using S3)",
     )
     file_hash = models.CharField(
         max_length=64,
@@ -441,6 +443,27 @@ class RawFile(models.Model):
     mime_type = models.CharField(
         max_length=100,
         help_text="MIME type (e.g., 'text/csv', 'application/pdf')",
+    )
+
+    # --- Feature 2: S3-Ready Storage Abstraction ---
+    LOCAL = "local"
+    S3 = "s3"
+    GCS = "gcs"
+    STORAGE_CHOICES = [
+        (LOCAL, "Local / Database"),
+        (S3, "AWS S3"),
+        (GCS, "Google Cloud Storage"),
+    ]
+    storage_backend = models.CharField(
+        max_length=10,
+        choices=STORAGE_CHOICES,
+        default=LOCAL,
+        help_text="Where the file is physically stored",
+    )
+    storage_path = models.CharField(
+        max_length=500,
+        blank=True,
+        help_text="Path in remote storage (e.g., 's3://bucket/tenant/file.csv')",
     )
 
     uploaded_at = models.DateTimeField(
@@ -516,6 +539,44 @@ class ParsedData(models.Model):
     extraction_model = models.CharField(
         max_length=100,
         help_text="Which AI model was used (e.g., 'gpt-4-turbo')",
+    )
+
+    # --- Feature 1: AI Confidence Flagging (per-field) ---
+    field_confidence_scores = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Per-field confidence: {"equipment_name": 0.95, "sample_id": 0.42, ...}',
+    )
+    flagged_fields = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Fields flagged for mandatory review: ["sample_id", "volume"]',
+    )
+    confidence_threshold = models.FloatField(
+        default=0.7,
+        help_text="Fields below this threshold are auto-flagged for review",
+    )
+
+    # --- Feature 3: Parsing Versioning (reproducibility) ---
+    extraction_prompt_version = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Version of the prompt template used (e.g., 'v2.3')",
+    )
+    extraction_prompt_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        help_text="SHA-256 of the exact prompt sent to the AI model",
+    )
+    extraction_model_version = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Full model version ID (e.g., 'gpt-4-turbo-2024-04-09')",
+    )
+    extraction_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Model params: {"temperature": 0, "max_tokens": 4096, ...}',
     )
 
     # Validation State

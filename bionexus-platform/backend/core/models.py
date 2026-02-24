@@ -16,6 +16,7 @@ import hashlib
 import json
 from datetime import datetime
 
+from django.conf import settings
 from django.db import models
 
 
@@ -415,7 +416,7 @@ class RawFile(models.Model):
         help_text="Tenant (lab) that uploaded the file",
     )
     user = models.ForeignKey(
-        "User",
+        settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         help_text="User who uploaded the file",
@@ -526,7 +527,7 @@ class ParsedData(models.Model):
         help_text="Current validation state",
     )
     validated_by = models.ForeignKey(
-        "User",
+        settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -578,14 +579,352 @@ class ParsedData(models.Model):
             "confirmed_json", "validation_notes"
         ])
 
-    def reject(self, user: User, notes: str):
-        """Mark parsing as rejected by human."""
-        self.state = self.REJECTED
-        self.validated_by = user
-        self.validated_at = timezone.now()
-        self.validation_notes = notes
-        self.save(update_fields=[
-            "state", "validated_by", "validated_at",
-            "validation_notes"
-        ])
+
+# --- Protocol Execution (Linking Intent to Action) -----------------------------
+
+
+class ExecutionLog(models.Model):
+    """Immutable record of protocol execution on a sample.
+
+    This is the PROOF that an experiment was performed:
+    - WHO ran it (user_id)
+    - WHAT protocol was applied (protocol_id)
+    - WHICH samples (linked via ExecutionStep)
+    - USING which equipment (equipment_id)
+    - WHEN it happened (started_at, completed_at)
+    - WHAT were the results (linked via ParsedData)
+
+    ALCOA+:
+    - Attributable: user_id + timestamp
+    - Legible: human-readable protocol execution
+    - Contemporaneous: started_at, completed_at
+    - Original: linked to immutable RawFile (machine output)
+    - Accurate: validated by human technician
+    - Complete: all steps recorded
+    - Consistent: same structure for all executions
+    - Enduring: soft delete only
+    - Available: audit trail for every step
+    """
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="execution_logs",
+    )
+    protocol = models.ForeignKey(
+        "protocols.Protocol",
+        on_delete=models.CASCADE,
+        related_name="executions",
+        help_text="Which protocol was executed",
+    )
+    equipment = models.ForeignKey(
+        "Equipment",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Equipment used (Hamilton robot, spectrophotometer, etc.)",
+    )
+    started_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="started_executions",
+        help_text="Technician who started execution",
+    )
+    validated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="validated_executions",
+        help_text="Technician who validated execution results",
+    )
+
+    started_at = models.DateTimeField(
+        help_text="When protocol execution began",
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When protocol execution finished",
+    )
+    validated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When technician confirmed results",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ("running", "Currently Running"),
+            ("completed", "Completed"),
+            ("error", "Error/Failed"),
+            ("validated", "Validated by Technician"),
+        ],
+        default="running",
+        db_index=True,
+    )
+
+    # Source of execution data
+    source_file = models.ForeignKey(
+        RawFile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Machine output file (CSV/JSON from equipment)",
+    )
+
+    notes = models.TextField(
+        blank=True,
+        help_text="Technician notes about execution",
+    )
+
+    is_deleted = models.BooleanField(
+        default=False,
+        help_text="Soft delete (data preserved for audit)",
+    )
+
+    class Meta:
+        app_label = "core"
+        ordering = ["-started_at"]
+        indexes = [
+            models.Index(fields=["tenant", "status"]),
+            models.Index(fields=["protocol", "started_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.protocol} @ {self.started_at} ({self.status})"
+
+
+class ExecutionStep(models.Model):
+    """Single step within an ExecutionLog.
+
+    Maps: Execution → Sample → Result (ParsedData)
+
+    One ExecutionLog can have multiple steps:
+    - Step 1: Apply reagent to sample A → Result recorded
+    - Step 2: Centrifuge sample A → Result recorded
+    - Step 3: Measure absorbance → Result recorded
+    """
+
+    execution = models.ForeignKey(
+        ExecutionLog,
+        on_delete=models.CASCADE,
+        related_name="steps",
+    )
+    protocol_step_number = models.IntegerField(
+        help_text="Step number in protocol (1, 2, 3, ...)",
+    )
+    sample = models.ForeignKey(
+        "samples.Sample",
+        on_delete=models.CASCADE,
+        help_text="Sample being processed in this step",
+    )
+
+    # Result of this step
+    parsed_data = models.ForeignKey(
+        ParsedData,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="execution_steps",
+        help_text="AI-extracted result from machine (e.g., measurement, image analysis)",
+    )
+
+    # Validation
+    is_valid = models.BooleanField(
+        default=False,
+        help_text="Technician confirmed this step's result is correct",
+    )
+    validation_notes = models.TextField(
+        blank=True,
+        help_text="Technician notes (e.g., 'Value seems low, verified with backup')",
+    )
+
+    class Meta:
+        app_label = "core"
+        unique_together = ("execution", "protocol_step_number", "sample")
+        ordering = ["execution", "protocol_step_number"]
+
+    def __str__(self) -> str:
+        return f"{self.execution.protocol} Step {self.protocol_step_number} - {self.sample}"
+
+
+class Equipment(models.Model):
+    """Laboratory equipment that generates data.
+
+    Equipment is a data SOURCE:
+    - Hamilton liquid handler → generates "dispense" events
+    - Spectrophotometer → generates "absorbance" measurements
+    - Plate reader → generates "fluorescence" readings
+    """
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="equipment",
+    )
+
+    equipment_id = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Unique equipment identifier (from parsed file)",
+    )
+    equipment_name = models.CharField(
+        max_length=255,
+        help_text="Human-readable name",
+    )
+    equipment_type = models.CharField(
+        max_length=100,
+        choices=[
+            ("liquid_handler", "Liquid Handler (Hamilton, Tecan)"),
+            ("spectrophotometer", "Spectrophotometer"),
+            ("plate_reader", "Plate Reader (Fluor, Absorbance)"),
+            ("incubator", "Incubator"),
+            ("centrifuge", "Centrifuge"),
+            ("pcr_machine", "PCR/qPCR Machine"),
+            ("microscope", "Microscope"),
+            ("freezer", "Freezer Storage"),
+            ("other", "Other"),
+        ],
+    )
+    location = models.CharField(
+        max_length=255,
+        help_text="Physical location in lab",
+    )
+
+    serial_number = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Serial number for traceability",
+    )
+
+    last_calibration = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last calibration date (critical for accuracy)",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ("operational", "Operational"),
+            ("maintenance", "In Maintenance"),
+            ("broken", "Broken"),
+            ("decommissioned", "Decommissioned"),
+        ],
+        default="operational",
+    )
+
+    class Meta:
+        app_label = "core"
+        ordering = ["equipment_name"]
+
+    def __str__(self) -> str:
+        return f"{self.equipment_name} ({self.equipment_type})"
+
+
+class CertifiedReport(models.Model):
+    """Certified data export with chain integrity verification.
+
+    This is the document that clients present to auditors. It includes:
+    - Complete execution history with all linked data
+    - Audit trail summary showing all modifications
+    - SHA-256 hash chain verification proof
+    - Signature from technician who certified it
+
+    CRITICAL: Report is NOT generated if audit chain is corrupted.
+    """
+
+    # STATES
+    PENDING = "pending"
+    CERTIFIED = "certified"
+    REVOKED = "revoked"
+    STATE_CHOICES = [
+        (PENDING, "Pending Certification"),
+        (CERTIFIED, "Certified & Auditable"),
+        (REVOKED, "Revoked (chain corrupted)"),
+    ]
+
+    # DATA
+    tenant = models.ForeignKey(
+        "Tenant",
+        on_delete=models.CASCADE,
+        related_name="certified_reports",
+        help_text="Lab that generated this report",
+    )
+    execution_log = models.ForeignKey(
+        ExecutionLog,
+        on_delete=models.CASCADE,
+        related_name="certified_reports",
+        help_text="Protocol execution this report documents",
+    )
+
+    # CERTIFICATION
+    certified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="certified_reports",
+        help_text="Technician/QA who certified this report",
+    )
+    certified_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When report was certified",
+    )
+
+    # INTEGRITY
+    report_hash = models.CharField(
+        max_length=64,
+        unique=True,
+        db_index=True,
+        help_text="SHA-256 hash of PDF content (proof of originality)",
+    )
+    chain_integrity_verified = models.BooleanField(
+        default=False,
+        help_text="Was audit chain verified before generation?",
+    )
+    chain_verification_details = models.JSONField(
+        default=dict,
+        help_text="Verification results: {total_records, verified, corrupted}",
+    )
+
+    # STORAGE
+    pdf_filename = models.CharField(
+        max_length=255,
+        help_text="Filename of certified PDF report",
+    )
+    pdf_size = models.BigIntegerField(
+        help_text="Size of PDF in bytes",
+    )
+
+    # STATE
+    state = models.CharField(
+        max_length=20,
+        choices=STATE_CHOICES,
+        default=PENDING,
+        db_index=True,
+        help_text="Certification state",
+    )
+    revocation_reason = models.TextField(
+        blank=True,
+        help_text="Reason for revocation if chain corrupted",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "core"
+        indexes = [
+            models.Index(fields=["tenant", "state"]),
+            models.Index(fields=["execution_log", "state"]),
+        ]
+        ordering = ["-certified_at"]
+
+    def __str__(self) -> str:
+        return f"Report {self.id}: {self.execution_log.protocol} ({self.state})"
 

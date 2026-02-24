@@ -1,71 +1,106 @@
 @echo off
-REM ============================================================================
-REM BioNexus MVP - Launcher for Windows
-REM Auto-pulls latest code, then starts Backend + Frontend
-REM ============================================================================
+setlocal enabledelayedexpansion
+
+REM ── Force run from the right directory ─────────────────────────────────────
+cd /d "%~dp0"
+
+title BioNexus MVP Launcher
+cls
 
 echo.
-echo ╔════════════════════════════════════════════════════════════════╗
-echo ║                   BioNexus MVP - Starting...                   ║
-echo ╚════════════════════════════════════════════════════════════════╝
+echo  ============================================================
+echo   BioNexus MVP - Lancement automatique
+echo  ============================================================
 echo.
 
-REM Check if we're in the right directory
-if not exist "bionexus-platform" (
-    echo ❌ ERROR: Run this from D:\Projects\BioNexus-mvp\
-    pause
-    exit /b 1
+REM ── STEP 1: Git pull ───────────────────────────────────────────────────────
+echo [1/5] Recuperation du dernier code...
+git pull origin claude/review-mvp-code-AnsTT >nul 2>&1
+echo       OK - Code a jour
+echo.
+
+REM ── STEP 2: Setup venv ─────────────────────────────────────────────────────
+echo [2/5] Preparation du backend Python...
+if not exist "bionexus-platform\backend\venv\Scripts\activate.bat" (
+    echo       Creation de l'environnement Python...
+    python -m venv bionexus-platform\backend\venv
 )
-
-REM ── AUTO GIT PULL ──────────────────────────────────────────────────────────
-echo 🔄 Pulling latest code from GitHub...
-git pull origin claude/review-mvp-code-AnsTT
-if %ERRORLEVEL% NEQ 0 (
-    echo ⚠️  Git pull failed - continuing with local code
-) else (
-    echo ✅ Code is up to date!
-)
+call bionexus-platform\backend\venv\Scripts\activate.bat
+pip install -r bionexus-platform\backend\requirements.txt -q --no-warn-script-location
+echo       OK - Backend pret
 echo.
 
-REM ── INSTALL NEW PACKAGES IF ANY ────────────────────────────────────────────
-echo 📦 Checking backend packages...
-call bionexus-platform\backend\venv\Scripts\activate.bat 2>nul
-pip install -r bionexus-platform\backend\requirements.txt -q
-echo ✅ Backend packages ready
-echo.
+REM ── STEP 3: Apply migrations ───────────────────────────────────────────────
+echo [3/5] Verification de la base de donnees...
+cd bionexus-platform\backend
+python manage.py migrate --run-syncdb >nul 2>&1
 
-echo 📦 Checking frontend packages...
-cd bionexus-platform\frontend
-call npm install --silent 2>nul
+REM Create demo user if not exists
+python manage.py shell -c "
+from core.models import Tenant, User
+from django.db import IntegrityError
+try:
+    t = Tenant.objects.get_or_create(name='Demo Lab', slug='demo-lab')[0]
+    User.objects.get_or_create(username='demo_user', defaults={'email':'demo@lab.local','tenant':t})[0].set_password('DemoPassword123!')
+    User.objects.filter(username='demo_user').update()
+    from django.contrib.auth.hashers import make_password
+    u = User.objects.get(username='demo_user')
+    if not u.check_password('DemoPassword123!'):
+        u.set_password('DemoPassword123!')
+        u.save()
+except: pass
+" >nul 2>&1
+
 cd ..\..
-echo ✅ Frontend packages ready
+echo       OK - Base de donnees prete
 echo.
 
-REM ── START BACKEND ──────────────────────────────────────────────────────────
-echo 🔧 Starting Backend Django on http://localhost:8000 ...
-start "BioNexus Backend" cmd /k "cd bionexus-platform\backend && .\venv\Scripts\activate && python manage.py runserver"
-timeout /t 3 /nobreak >nul
+REM ── STEP 4: NPM install ────────────────────────────────────────────────────
+echo [4/5] Preparation du frontend React...
+cd bionexus-platform\frontend
+call npm install --silent >nul 2>&1
+cd ..\..
+echo       OK - Frontend pret
+echo.
 
-REM ── START FRONTEND ─────────────────────────────────────────────────────────
-echo 🎨 Starting Frontend React on http://localhost:5173 ...
-start "BioNexus Frontend" cmd /k "cd bionexus-platform\frontend && npm start"
+REM ── STEP 5: Start servers ──────────────────────────────────────────────────
+echo [5/5] Demarrage des serveurs...
 
-REM ── OPEN BROWSER ───────────────────────────────────────────────────────────
+REM Kill old processes on ports 8000 and 5173
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8000" 2^>nul') do taskkill /F /PID %%a >nul 2>&1
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":5173" 2^>nul') do taskkill /F /PID %%a >nul 2>&1
+timeout /t 1 /nobreak >nul
+
+REM Start Django backend
+start "BioNexus - Backend Django" cmd /k "cd /d %~dp0bionexus-platform\backend && call venv\Scripts\activate && python manage.py runserver && pause"
+
+REM Wait for Django to be ready
+timeout /t 4 /nobreak >nul
+
+REM Start React frontend
+start "BioNexus - Frontend React" cmd /k "cd /d %~dp0bionexus-platform\frontend && npm start && pause"
+
+REM Wait for Vite to compile
 echo.
-echo 🌐 Opening browser in 8 seconds...
-timeout /t 8 /nobreak >nul
-start http://localhost:5173
+echo  Demarrage en cours, patientez...
+timeout /t 10 /nobreak >nul
+
+REM Open browser
+start "" "http://localhost:5173"
 
 echo.
-echo ╔════════════════════════════════════════════════════════════════╗
-echo ║                  ✅ BioNexus MVP is Running!                   ║
-echo ╚════════════════════════════════════════════════════════════════╝
+echo  ============================================================
+echo   OK - BioNexus est lance!
+echo  ============================================================
 echo.
-echo   Backend:   http://localhost:8000
-echo   Frontend:  http://localhost:5173
+echo   Frontend : http://localhost:5173
+echo   Backend  : http://localhost:8000
 echo.
-echo   Login:     demo_user / DemoPassword123!
+echo   Login    : demo_user
+echo   Password : DemoPassword123!
 echo.
-echo   🔄 Code auto-updates every time you run RUN.bat
-echo   ⚠️  Keep both terminals open!
+echo   GARDEZ LES 2 TERMINAUX OUVERTS!
 echo.
+echo  ============================================================
+echo.
+pause

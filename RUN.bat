@@ -1,18 +1,8 @@
 @echo off
 REM ============================================================================
 REM BioNexus MVP - Launcher for Windows
-REM Starts both Backend (Django) and Frontend (React) simultaneously
+REM Auto-pulls latest code, then starts Backend + Frontend
 REM ============================================================================
-
-REM Check if we're in the right directory
-if not exist "bionexus-platform" (
-    echo.
-    echo ❌ ERROR: BioNexus folder not found!
-    echo Please run this script from the BioNexus-mvp root directory
-    echo.
-    pause
-    exit /b 1
-)
 
 echo.
 echo ╔════════════════════════════════════════════════════════════════╗
@@ -20,49 +10,62 @@ echo ║                   BioNexus MVP - Starting...                   ║
 echo ╚════════════════════════════════════════════════════════════════╝
 echo.
 
-REM Colors and messages
-echo 📦 Preparing backend and frontend...
+REM Check if we're in the right directory
+if not exist "bionexus-platform" (
+    echo ❌ ERROR: Run this from D:\Projects\BioNexus-mvp\
+    pause
+    exit /b 1
+)
+
+REM ── AUTO GIT PULL ──────────────────────────────────────────────────────────
+echo 🔄 Pulling latest code from GitHub...
+git pull origin claude/review-mvp-code-AnsTT
+if %ERRORLEVEL% NEQ 0 (
+    echo ⚠️  Git pull failed - continuing with local code
+) else (
+    echo ✅ Code is up to date!
+)
 echo.
 
-REM Start Backend (Terminal 1)
-echo 🔧 Starting Backend Django (Terminal 1)...
-start "BioNexus Backend" cmd /k "cd bionexus-platform\backend && python -m venv venv >nul 2>&1 || echo venv exists... && .\venv\Scripts\activate && python manage.py runserver"
-
-REM Wait a bit for backend to start
-timeout /t 3 /nobreak
-
-REM Start Frontend (Terminal 2)
-echo 🎨 Starting Frontend React (Terminal 2)...
-start "BioNexus Frontend" cmd /k "cd bionexus-platform\frontend && npm install >nul 2>&1 || echo npm packages installed... && npm start"
-
-REM Open browser
+REM ── INSTALL NEW PACKAGES IF ANY ────────────────────────────────────────────
+echo 📦 Checking backend packages...
+call bionexus-platform\backend\venv\Scripts\activate.bat 2>nul
+pip install -r bionexus-platform\backend\requirements.txt -q
+echo ✅ Backend packages ready
 echo.
-echo 🌐 Opening browser...
-timeout /t 5 /nobreak
-start http://localhost:3000
+
+echo 📦 Checking frontend packages...
+cd bionexus-platform\frontend
+call npm install --silent 2>nul
+cd ..\..
+echo ✅ Frontend packages ready
+echo.
+
+REM ── START BACKEND ──────────────────────────────────────────────────────────
+echo 🔧 Starting Backend Django on http://localhost:8000 ...
+start "BioNexus Backend" cmd /k "cd bionexus-platform\backend && .\venv\Scripts\activate && python manage.py runserver"
+timeout /t 3 /nobreak >nul
+
+REM ── START FRONTEND ─────────────────────────────────────────────────────────
+echo 🎨 Starting Frontend React on http://localhost:5173 ...
+start "BioNexus Frontend" cmd /k "cd bionexus-platform\frontend && npm start"
+
+REM ── OPEN BROWSER ───────────────────────────────────────────────────────────
+echo.
+echo 🌐 Opening browser in 8 seconds...
+timeout /t 8 /nobreak >nul
+start http://localhost:5173
 
 echo.
 echo ╔════════════════════════════════════════════════════════════════╗
-echo ║              ✅ BioNexus MVP is Starting!                      ║
+echo ║                  ✅ BioNexus MVP is Running!                   ║
 echo ╚════════════════════════════════════════════════════════════════╝
 echo.
-echo 📊 What's happening:
-echo   • Terminal 1 (Backend):   Django running on http://localhost:8000
-echo   • Terminal 2 (Frontend):  React running on http://localhost:3000
-echo   • Browser:                Automatically opened http://localhost:3000
+echo   Backend:   http://localhost:8000
+echo   Frontend:  http://localhost:5173
 echo.
-echo 👤 Login with:
-echo   Username: demo_user
-echo   Password: DemoPassword123!
+echo   Login:     demo_user / DemoPassword123!
 echo.
-echo ⚠️  IMPORTANT NOTES:
-echo   • Keep both terminals open (don't close them)
-echo   • Changes to code will auto-reload in browser
-echo   • Backend changes might require restart
-echo   • If something breaks, check the terminal output
-echo.
-echo 🛑 To stop everything:
-echo   1. Close Terminal 1 (Backend)
-echo   2. Close Terminal 2 (Frontend)
-echo   3. Or press Ctrl+C in each terminal
+echo   🔄 Code auto-updates every time you run RUN.bat
+echo   ⚠️  Keep both terminals open!
 echo.

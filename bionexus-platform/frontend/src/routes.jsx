@@ -1,14 +1,17 @@
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import Login from './components/Login';
+import Dashboard from './components/Dashboard';
 
-function Home() {
-  return <h1>BioNexus UI</h1>;
-}
+export default function AppRoutes({ user, onLogin, onLogout }) {
+  if (!user) {
+    return <Login onLogin={onLogin} />;
+  }
 
-export default function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Home />} />
+      <Route path="/" element={<Dashboard username={user} onLogout={onLogout} />} />
+      <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );
 }

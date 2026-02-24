@@ -34,23 +34,7 @@ REM ── STEP 3: Apply migrations ──────────────�
 echo [3/5] Verification de la base de donnees...
 cd bionexus-platform\backend
 python manage.py migrate --run-syncdb >nul 2>&1
-
-REM Create demo user if not exists
-python manage.py shell -c "
-from core.models import Tenant, User
-from django.db import IntegrityError
-try:
-    t = Tenant.objects.get_or_create(name='Demo Lab', slug='demo-lab')[0]
-    User.objects.get_or_create(username='demo_user', defaults={'email':'demo@lab.local','tenant':t})[0].set_password('DemoPassword123!')
-    User.objects.filter(username='demo_user').update()
-    from django.contrib.auth.hashers import make_password
-    u = User.objects.get(username='demo_user')
-    if not u.check_password('DemoPassword123!'):
-        u.set_password('DemoPassword123!')
-        u.save()
-except: pass
-" >nul 2>&1
-
+python create_demo_user.py
 cd ..\..
 echo       OK - Base de donnees prete
 echo.

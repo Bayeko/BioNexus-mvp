@@ -989,3 +989,300 @@ class CertifiedReport(models.Model):
     def __str__(self) -> str:
         return f"Report {self.id}: {self.execution_log.protocol} ({self.state})"
 
+
+# --- Plug-and-Parse Architecture (SiLA 2 Standard + AI Mapping + Hot-Plug) -----------
+
+
+class Connector(models.Model):
+    """Hub de Drivers Abstraits - Standard SiLA 2 interface for lab equipment.
+
+    Instead of coding each machine individually, we define a standard interface
+    using SiLA 2 (Standardization in Lab Automation). Each connector represents
+    an abstract driver that can connect to one or more physical machines.
+
+    Example:
+    - Connector: "Hamilton Microlab STAR" (SiLA 2 standard)
+    - Machines: "Hamilton-Lab1", "Hamilton-Lab2" (both use same connector)
+    """
+
+    # Standard SiLA 2 categories
+    LIQUID_HANDLER = "liquid_handler"
+    PLATE_READER = "plate_reader"
+    INCUBATOR = "incubator"
+    CENTRIFUGE = "centrifuge"
+    SPECTROPHOTOMETER = "spectrophotometer"
+    PCR_MACHINE = "pcr_machine"
+    MICROSCOPE = "microscope"
+    STORAGE = "storage"
+    OTHER = "other"
+
+    CONNECTOR_TYPE_CHOICES = [
+        (LIQUID_HANDLER, "Liquid Handler (Hamilton, Tecan, Eppendorf)"),
+        (PLATE_READER, "Plate Reader (BioTek, Tecan, Infinite)"),
+        (INCUBATOR, "Incubator"),
+        (CENTRIFUGE, "Centrifuge"),
+        (SPECTROPHOTOMETER, "Spectrophotometer"),
+        (PCR_MACHINE, "PCR/qPCR Machine"),
+        (MICROSCOPE, "Microscope"),
+        (STORAGE, "Sample Storage System"),
+        (OTHER, "Other Equipment"),
+    ]
+
+    # Connector status
+    ACTIVE = "active"
+    BETA = "beta"
+    DEPRECATED = "deprecated"
+    STATUS_CHOICES = [
+        (ACTIVE, "Active (Production Ready)"),
+        (BETA, "Beta (Testing)"),
+        (DEPRECATED, "Deprecated (Use newer version)"),
+    ]
+
+    connector_id = models.SlugField(
+        unique=True,
+        help_text="Unique identifier (e.g., 'hamilton-microlab-star')",
+    )
+    connector_name = models.CharField(
+        max_length=255,
+        help_text="Human-readable name (e.g., 'Hamilton Microlab STAR')",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="What this connector does and which machines it supports",
+    )
+
+    # SiLA 2 Classification
+    connector_type = models.CharField(
+        max_length=50,
+        choices=CONNECTOR_TYPE_CHOICES,
+        help_text="SiLA 2 equipment category",
+    )
+
+    # Versioning & Status
+    version = models.CharField(
+        max_length=50,
+        default="1.0.0",
+        help_text="SiLA interface version (semantic versioning)",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=ACTIVE,
+        help_text="Is this connector ready for production?",
+    )
+
+    # FDL (Feature Definition Language) Descriptor
+    # This is the "machine blueprint" in JSON/XML format
+    fdl_descriptor = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="SiLA 2 Feature Definition Language (FDL) - machine capabilities & output schema",
+    )
+
+    # Pivot Model Reference
+    # Maps which fields this connector can provide to our Pivot Model
+    pivot_model_mapping = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="How this connector's outputs map to Pivot Model fields",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "core"
+        ordering = ["connector_type", "connector_name"]
+        verbose_name = "Connector (SiLA 2 Driver)"
+
+    def __str__(self) -> str:
+        return f"{self.connector_name} v{self.version}"
+
+
+class ConnectorMapping(models.Model):
+    """FDL (Feature Definition Language) - Output schema for a Connector.
+
+    Defines what columns/fields a connector can produce. This is the "contract"
+    between the machine and our system.
+
+    Example for Hamilton:
+    - field: "dispense_volume"
+    - data_type: "float"
+    - unit: "μL"
+    - required: True
+
+    When the machine sends data, we validate it against this schema.
+    """
+
+    DATA_TYPE_CHOICES = [
+        ("string", "Text"),
+        ("float", "Decimal Number"),
+        ("integer", "Whole Number"),
+        ("boolean", "True/False"),
+        ("datetime", "Date/Time"),
+        ("json", "Structured Data"),
+    ]
+
+    connector = models.ForeignKey(
+        Connector,
+        on_delete=models.CASCADE,
+        related_name="output_fields",
+        help_text="Which connector outputs this field",
+    )
+
+    field_name = models.CharField(
+        max_length=255,
+        help_text="Field name from machine output (e.g., 'dispense_volume')",
+    )
+    field_description = models.TextField(
+        blank=True,
+        help_text="Human description of what this field represents",
+    )
+
+    data_type = models.CharField(
+        max_length=50,
+        choices=DATA_TYPE_CHOICES,
+        help_text="Expected data type",
+    )
+
+    unit = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Unit of measurement (e.g., 'μL', '°C', 'seconds')",
+    )
+
+    is_required = models.BooleanField(
+        default=False,
+        help_text="Must this field be present in machine output?",
+    )
+
+    min_value = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Validation: minimum value (for numeric types)",
+    )
+    max_value = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Validation: maximum value (for numeric types)",
+    )
+
+    validation_regex = models.CharField(
+        max_length=500,
+        blank=True,
+        help_text="Regex pattern for validation (for string types)",
+    )
+
+    # Pivot Model Mapping
+    # When AI recognizes this field, what does it correspond to in our Pivot Model?
+    pivot_field = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Our internal field name in Pivot Model (e.g., 'volume', 'temperature')",
+    )
+
+    confidence_default = models.FloatField(
+        default=0.8,
+        help_text="Default AI confidence score for this mapping (0.0 to 1.0)",
+    )
+
+    class Meta:
+        app_label = "core"
+        unique_together = ("connector", "field_name")
+        ordering = ["connector", "field_name"]
+        verbose_name = "Connector Output Field (FDL)"
+
+    def __str__(self) -> str:
+        return f"{self.connector.connector_name}: {self.field_name}"
+
+
+class TenantConnectorProfile(models.Model):
+    """Mapping Dynamique par IA - AI-validated column mapping saved per tenant.
+
+    This is where the magic happens. When our AI recognizes incoming columns,
+    it suggests mappings. Once the user confirms, we save it here.
+
+    Example flow:
+    1. Machine sends data with columns: "Temp", "Sample_ID", "Vol"
+    2. AI suggests: "Temp" → temperature, "Sample_ID" → sample_id, "Vol" → volume
+    3. User confirms mapping
+    4. TenantConnectorProfile saves this decision
+    5. Future data from this machine uses saved mapping (no re-asking)
+    """
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="connector_profiles",
+        help_text="Which lab owns this profile",
+    )
+    connector = models.ForeignKey(
+        Connector,
+        on_delete=models.CASCADE,
+        related_name="tenant_profiles",
+        help_text="Which connector this profile configures",
+    )
+
+    # Machine Identity (allows multiple instances of same connector)
+    machine_instance_name = models.CharField(
+        max_length=255,
+        help_text="Name of this specific machine (e.g., 'Hamilton-Lab1')",
+    )
+
+    # AI-Learned Mapping
+    # Key: field name from machine, Value: our Pivot Model field
+    column_mapping = models.JSONField(
+        default=dict,
+        help_text='{"Temp": "temperature", "Sample_ID": "sample_id", "Vol": "volume"}',
+    )
+
+    # Confidence scores from AI
+    mapping_confidence_scores = models.JSONField(
+        default=dict,
+        help_text='{"Temp": 0.98, "Sample_ID": 0.95, "Vol": 0.87}',
+    )
+
+    # User Validation
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="confirmed_connector_profiles",
+        help_text="User who confirmed this mapping",
+    )
+    confirmed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When user confirmed the mapping",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Is this profile being used for new data?",
+    )
+
+    # AI Model Used
+    mapping_model_version = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Which AI model recognized this mapping (e.g., 'gpt-4-turbo')",
+    )
+    mapping_prompt_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        help_text="SHA-256 of prompt used for this mapping (reproducibility)",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "core"
+        unique_together = ("tenant", "connector", "machine_instance_name")
+        ordering = ["-confirmed_at", "machine_instance_name"]
+        verbose_name = "Tenant Connector Profile (AI Mapping)"
+
+    def __str__(self) -> str:
+        status = "✓ Confirmed" if self.confirmed_by else "⏳ Pending"
+        return f"{self.tenant.name}: {self.connector.connector_name} ({self.machine_instance_name}) {status}"
+

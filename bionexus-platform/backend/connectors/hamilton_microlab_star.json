@@ -1,0 +1,29 @@
+{
+  "connector_id": "hamilton-microlab-star",
+  "connector_name": "Hamilton Microlab STAR",
+  "description": "Hamilton Microlab STAR liquid handling robot with integrated logging",
+  "connector_type": "liquid_handler",
+  "version": "1.0.0",
+  "status": "active",
+  "fdl_descriptor": {
+    "standard": "SiLA 2.0",
+    "manufacturer": "Hamilton Company",
+    "model": "Microlab STAR",
+    "capabilities": [
+      "aspirate",
+      "dispense",
+      "mix",
+      "incubate"
+    ],
+    "output_format": "CSV"
+  },
+  "pivot_model_mapping": {
+    "Sample ID": "sample_id",
+    "Plate ID": "plate_id",
+    "Well": "well_position",
+    "Aspirated Volume": "aspirated_volume",
+    "Dispensed Volume": "dispensed_volume",
+    "Timestamp": "timestamp",
+    "Status": "status"
+  }
+}

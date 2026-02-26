@@ -49,6 +49,56 @@ npm run start
 ```
 Interface disponible sur http://localhost:3000/
 
+## 🔌 Plug-and-Parse Architecture
+
+BioNexus intègre une architecture **hot-plug** qui permet d'ajouter de nouvelles machines sans coder.
+
+### Quick Start
+```bash
+# 1. Déposer un fichier JSON dans /backend/connectors/
+# 2. Charger les connecteurs
+python manage.py load_connectors
+
+# 3. L'API est prête!
+curl http://localhost:8000/api/connectors/
+```
+
+### Features
+- **SiLA 2 Standard**: Interface standardisée pour toutes les machines
+- **AI Column Recognition**: L'IA reconnaît automatiquement les colonnes entrantes
+- **Tenant Profiles**: Chaque labo peut configurer ses machines indépendamment
+- **Hot-Plug**: Ajouter une machine = déposer un JSON (zéro redéploiement)
+
+👉 **Voir la documentation complète**: [PLUG_AND_PARSE.md](./PLUG_AND_PARSE.md)
+
+### Exemple
+```bash
+# Ajouter une nouvelle machine (Hamilton Microlab STAR)
+# File: /backend/connectors/hamilton_microlab_star.json
+{
+  "connector_id": "hamilton-microlab-star",
+  "connector_name": "Hamilton Microlab STAR",
+  "connector_type": "liquid_handler",
+  "version": "1.0.0",
+  "status": "active",
+  "pivot_model_mapping": {
+    "Sample ID": "sample_id",
+    "Aspirated Volume": "aspirated_volume",
+    "Timestamp": "timestamp"
+  }
+}
+
+# Recharger
+python manage.py load_connectors
+
+# C'est tout! Endpoints disponibles:
+# GET  /api/connectors/
+# GET  /api/connectors/hamilton-microlab-star/
+# POST /api/mappings/suggest/
+# POST /api/mappings/confirm/
+# GET  /api/tenant-profiles/
+```
+
 ## Tests
 - Backend : depuis `bionexus-platform/backend`, exécuter `pytest`.
 - Frontend : depuis `bionexus-platform/frontend`, exécuter `npm test`.

@@ -619,3 +619,64 @@ python manage.py shell
 ---
 
 **Happy Testing! 🚀**
+
+---
+
+## 🔌 Plug-and-Parse: Adding New Equipment
+
+BioNexus includes a **hot-plug** system to add new lab equipment without coding.
+
+### Quick Example: Add Hamilton Microlab STAR
+
+**Step 1: Create config file**
+```bash
+# File: /backend/connectors/hamilton_microlab_star.json
+{
+  "connector_id": "hamilton-microlab-star",
+  "connector_name": "Hamilton Microlab STAR",
+  "connector_type": "liquid_handler",
+  "version": "1.0.0",
+  "status": "active",
+  "fdl_descriptor": {
+    "standard": "SiLA 2.0",
+    "manufacturer": "Hamilton",
+    "capabilities": ["aspirate", "dispense", "mix"]
+  },
+  "pivot_model_mapping": {
+    "Sample ID": "sample_id",
+    "Aspirated Volume": "aspirated_volume",
+    "Timestamp": "timestamp"
+  }
+}
+```
+
+**Step 2: Load connector**
+```bash
+python manage.py load_connectors
+# ✓ Loaded hamilton_microlab_star.json
+```
+
+**Step 3: Use API**
+```bash
+# List all connectors
+curl http://localhost:8000/api/connectors/
+
+# Get details
+curl http://localhost:8000/api/connectors/hamilton-microlab-star/
+
+# Suggest column mappings
+curl -X POST http://localhost:8000/api/mappings/suggest/ \
+  -H "Content-Type: application/json" \
+  -d '{"incoming_columns": ["Sample ID", "Volume", "Status"]}'
+```
+
+### How It Works
+1. Admin drops JSON config → `/backend/connectors/`
+2. Run `python manage.py load_connectors`
+3. Database registers: Connector + ConnectorMapping
+4. API endpoints ready ✓
+5. User uploads file → AI recognizes columns
+6. User confirms mappings → TenantConnectorProfile saved
+7. Next file from same machine = auto-mapped ✓
+
+👉 **Full docs**: See [PLUG_AND_PARSE.md](./PLUG_AND_PARSE.md)

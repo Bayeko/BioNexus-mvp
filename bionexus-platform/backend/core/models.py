@@ -18,6 +18,7 @@ from datetime import datetime
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class AuditLog(models.Model):
@@ -147,7 +148,7 @@ class AuditLog(models.Model):
             "changes": changes,
             "timestamp": timestamp,
         }
-        canonical = json.dumps(data, sort_keys=True, separators=(",", ":"))
+        canonical = json.dumps(data, sort_keys=True, separators=(",", ":"), default=str)
         return hashlib.sha256(canonical.encode()).hexdigest()
 
     def clean(self):
@@ -579,6 +580,22 @@ class ParsedData(models.Model):
             "confirmed_json", "validation_notes"
         ])
 
+    def reject(self, user: User, reason: str = ""):
+        """Mark parsing as rejected by a human.
+
+        Args:
+            user: User rejecting the extraction
+            reason: Why the extraction was rejected
+        """
+        self.state = self.REJECTED
+        self.validated_by = user
+        self.validated_at = timezone.now()
+        self.validation_notes = reason
+        self.save(update_fields=[
+            "state", "validated_by", "validated_at",
+            "validation_notes"
+        ])
+
 
 # --- Protocol Execution (Linking Intent to Action) -----------------------------
 
@@ -881,6 +898,7 @@ class CertifiedReport(models.Model):
         max_length=64,
         unique=True,
         db_index=True,
+        default="",
         help_text="SHA-256 hash of PDF content (proof of originality)",
     )
     chain_integrity_verified = models.BooleanField(
@@ -895,9 +913,11 @@ class CertifiedReport(models.Model):
     # STORAGE
     pdf_filename = models.CharField(
         max_length=255,
+        default="",
         help_text="Filename of certified PDF report",
     )
     pdf_size = models.BigIntegerField(
+        default=0,
         help_text="Size of PDF in bytes",
     )
 

@@ -14,10 +14,19 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 // --- Types matching server ---
 
+export type RiskLevel = 'green' | 'yellow' | 'red';
+
 export interface ProposedAction {
   description: string;
   priority: 'high' | 'medium' | 'low';
   connector?: string;
+  riskLevel?: RiskLevel;
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
 }
 
 export interface Proposal {
@@ -31,7 +40,19 @@ export interface Proposal {
   createdAt: string;
   decidedAt?: string;
   executionLog?: string[];
+  chatHistory?: ChatMessage[];
   error?: string;
+  riskLevel?: RiskLevel;
+  autoApproved?: boolean;
+  undoDeadline?: string;
+}
+
+export interface RiskOverride {
+  id: string;
+  pattern: string;
+  riskLevel: RiskLevel;
+  description?: string;
+  createdAt: string;
 }
 
 export interface WorkflowDefinition {
@@ -66,6 +87,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ reason }),
     }),
+  chatWithProposal: (id: string, message: string) =>
+    request<{ reply: string; chatHistory: ChatMessage[] }>(`/proposals/${id}/chat`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    }),
+  reviseProposal: (id: string) =>
+    request<Proposal>(`/proposals/${id}/revise`, { method: 'POST' }),
   getWorkflows: () => request<WorkflowDefinition[]>('/workflows'),
   toggleWorkflow: (id: string) => request<WorkflowDefinition>(`/workflows/${id}/toggle`, { method: 'PUT' }),
   triggerWorkflow: (id: string) => request<{ ok: boolean }>(`/workflows/${id}/trigger`, { method: 'POST' }),
@@ -75,9 +103,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ prompt }),
     }),
+  undoProposal: (id: string) => request<Proposal>(`/proposals/${id}/undo`, { method: 'POST' }),
   getConnectors: () => request<ConnectorInfo[]>('/connectors'),
   enableConnector: (name: string) => request<unknown>(`/connectors/${name}/enable`, { method: 'PUT' }),
   disableConnector: (name: string) => request<unknown>(`/connectors/${name}/disable`, { method: 'PUT' }),
+  getRiskOverrides: () => request<RiskOverride[]>('/settings/risk-overrides'),
+  addRiskOverride: (override: { pattern: string; riskLevel: RiskLevel; description?: string }) =>
+    request<RiskOverride>('/settings/risk-overrides', {
+      method: 'POST',
+      body: JSON.stringify(override),
+    }),
+  removeRiskOverride: (id: string) =>
+    request<{ ok: boolean }>(`/settings/risk-overrides/${id}`, { method: 'DELETE' }),
 };
 
 // --- SSE ---

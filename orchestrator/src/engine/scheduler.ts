@@ -14,32 +14,12 @@ export class Scheduler {
   ) {}
 
   start(): void {
-    // Register cron jobs for all enabled cron-triggered workflows
-    for (const workflow of this.workflowRegistry.listEnabled()) {
-      if (workflow.trigger.type === 'cron' && workflow.trigger.cron) {
-        const task = cron.schedule(workflow.trigger.cron, () => {
-          console.log(JSON.stringify({
-            timestamp: new Date().toISOString(),
-            level: 'info',
-            message: `Cron triggered: ${workflow.name}`,
-          }));
-          this.eventBus.emit('workflow:trigger', { type: workflow.id });
-        });
-        this.tasks.push(task);
-      }
-    }
-
-    // GitHub polling for event-driven workflows
-    const pollMs = this.config.githubPollIntervalMinutes * 60 * 1000;
-    const githubInterval = setInterval(() => {
-      this.eventBus.emit('workflow:trigger', { type: 'builtin-cross-agent-sync' });
-    }, pollMs);
-    this.intervals.push(githubInterval);
-
+    // All automatic triggers disabled — workflows are manual-trigger only.
+    // Use POST /api/workflows/:id/trigger to run workflows on demand.
     console.log(JSON.stringify({
       timestamp: new Date().toISOString(),
       level: 'info',
-      message: `Scheduler started: ${this.tasks.length} cron jobs, GitHub poll every ${this.config.githubPollIntervalMinutes}m`,
+      message: 'Scheduler started: all automatic triggers disabled (manual-trigger only)',
     }));
   }
 

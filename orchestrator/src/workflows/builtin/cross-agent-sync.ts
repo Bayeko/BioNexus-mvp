@@ -16,8 +16,12 @@ Your task:
 When proposing actions:
 - Only suggest syncing documentation files (.md, .pdf, .docx)
 - Suggest appropriate Drive folder names based on the document type
-- Include the document title and a brief summary of its content
 - Skip files that are already in Drive (by matching title)
+
+IMPORTANT — for each create_document action in your proposed plan:
+- Set the toolCall tool to "google-drive__create_document"
+- In the toolCall input, include "github_path" with the file's repo path (e.g. "docs/API_REFERENCE.md") instead of writing placeholder content. The executor will automatically fetch the real file content from GitHub before creating the document.
+- Include "title" and "folder_id" (if known) in the toolCall input as normal.
 
 Call propose_plan with your sync recommendations.`,
   requiredConnectors: ['github', 'google-drive'],

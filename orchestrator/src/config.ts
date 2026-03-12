@@ -38,7 +38,7 @@ export function loadConfig(): OrchestratorConfig {
     host: optionalEnv('HOST', 'localhost'),
     anthropic: {
       apiKey: requireEnv('ANTHROPIC_API_KEY'),
-      model: optionalEnv('ANTHROPIC_MODEL', 'claude-sonnet-4-20250514'),
+      model: optionalEnv('ANTHROPIC_MODEL', 'claude-haiku-4-5-20251001'),
     },
     google: {
       clientId: optionalEnv('GOOGLE_CLIENT_ID', ''),

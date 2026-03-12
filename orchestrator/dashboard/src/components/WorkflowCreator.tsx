@@ -4,6 +4,12 @@ interface WorkflowCreatorProps {
   onCreateFromPrompt: (prompt: string) => Promise<void>;
 }
 
+const EXAMPLES = [
+  'Every time Johannes emails me, draft a prep doc with relevant Drive files',
+  'Every Monday at 9am, check for PRs that need my review',
+  'When a new file is added to the docs/ folder, create a summary and share it via email',
+];
+
 export function WorkflowCreator({ onCreateFromPrompt }: WorkflowCreatorProps) {
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,59 +37,52 @@ export function WorkflowCreator({ onCreateFromPrompt }: WorkflowCreatorProps) {
 
   return (
     <div>
-      <h2>Create Workflow</h2>
-      <div className="card">
-        <div className="card-body">
-          <p style={{ marginBottom: 12 }}>
-            Describe a new workflow in plain English. The AI will create a structured
-            workflow definition from your description.
-          </p>
-
-          <form onSubmit={handleSubmit}>
-            <input
-              className="input"
-              type="text"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder='e.g. "Every time Johannes emails me, draft a prep doc with relevant Drive files"'
-              disabled={loading}
-            />
-
-            <div className="card-actions">
-              <button className="btn btn-primary" type="submit" disabled={loading || !prompt.trim()}>
-                {loading ? 'Creating...' : 'Create Workflow'}
-              </button>
-            </div>
-          </form>
-
-          {error && (
-            <p style={{ color: 'var(--red)', fontSize: 13, marginTop: 8 }}>{error}</p>
-          )}
-          {success && (
-            <p style={{ color: 'var(--green)', fontSize: 13, marginTop: 8 }}>{success}</p>
-          )}
-        </div>
+      <div className="page-header">
+        <h2>Create Workflow</h2>
+        <p>Describe a new workflow in plain English and let AI build it</p>
       </div>
 
-      <div className="card" style={{ marginTop: 12 }}>
-        <div className="card-title" style={{ marginBottom: 8 }}>Examples</div>
+      <div className="card">
+        <form onSubmit={handleSubmit}>
+          <textarea
+            className="input"
+            style={{ minHeight: 80, resize: 'vertical', fontFamily: 'var(--font)' }}
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Describe what you want the workflow to do..."
+            disabled={loading}
+          />
+
+          <div className="card-actions">
+            <button className="btn btn-primary" type="submit" disabled={loading || !prompt.trim()}>
+              {loading && <span className="spinner" />}
+              {loading ? 'Creating...' : 'Create Workflow'}
+            </button>
+          </div>
+        </form>
+
+        {error && (
+          <p style={{ color: 'var(--red)', fontSize: 13, marginTop: 12 }}>{error}</p>
+        )}
+        {success && (
+          <p style={{ color: 'var(--green)', fontSize: 13, marginTop: 12 }}>{success}</p>
+        )}
+      </div>
+
+      <div className="section-label">Examples</div>
+      <div className="card">
         <div className="card-body">
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {[
-              'Every time Johannes emails me, draft a prep doc with relevant Drive files',
-              'Every Monday at 9am, check for PRs that need my review',
-              'When a new file is added to the docs/ folder, create a summary and share it via email',
-            ].map((example, i) => (
-              <li
-                key={i}
-                style={{ padding: '6px 0', cursor: 'pointer', fontSize: 13 }}
-                onClick={() => setPrompt(example)}
-              >
-                <span style={{ color: 'var(--accent)', marginRight: 6 }}>&gt;</span>
-                {example}
-              </li>
-            ))}
-          </ul>
+          {EXAMPLES.map((example, i) => (
+            <div
+              key={i}
+              className="action-item"
+              style={{ cursor: 'pointer' }}
+              onClick={() => setPrompt(example)}
+            >
+              <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>&gt;</span>
+              <span>{example}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>

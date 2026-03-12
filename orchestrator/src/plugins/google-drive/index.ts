@@ -1,3 +1,5 @@
+import { google, type drive_v3 } from 'googleapis';
+import type { OAuth2Client } from 'google-auth-library';
 import type { ConnectorPlugin, ToolDefinition } from '../types.js';
 
 export class GoogleDrivePlugin implements ConnectorPlugin {
@@ -5,7 +7,8 @@ export class GoogleDrivePlugin implements ConnectorPlugin {
   displayName = 'Google Drive';
   description = 'Search, read, and create documents in Google Drive';
 
-  private initialized = false;
+  private oauth2Client: OAuth2Client | null = null;
+  private drive: drive_v3.Drive | null = null;
 
   tools: ToolDefinition[] = [
     {
@@ -58,29 +61,35 @@ export class GoogleDrivePlugin implements ConnectorPlugin {
   ];
 
   async executeTool(name: string, input: Record<string, unknown>): Promise<unknown> {
-    if (!this.initialized) {
+    if (!this.drive) {
       return { error: 'Google Drive not configured. Set GOOGLE_* environment variables.' };
     }
 
     switch (name) {
       case 'search_files':
-        return { files: [], message: `Would search for: ${input.query}` };
+        return this.searchFiles(input);
       case 'get_file_content':
-        return { content: null, message: `Would fetch content of file ${input.file_id}` };
+        return this.getFileContent(input);
       case 'create_document':
-        return { file_id: null, message: `Would create document: ${input.title}` };
+        return this.createDocument(input);
       case 'list_files':
-        return { files: [], message: 'Would list files in folder' };
+        return this.listFiles(input);
       default:
         return { error: `Unknown tool: ${name}` };
     }
   }
 
   async healthCheck(): Promise<{ ok: boolean; message?: string }> {
-    if (!this.initialized) {
+    if (!this.drive) {
       return { ok: false, message: 'Not configured — set Google OAuth credentials in .env' };
     }
-    return { ok: true };
+    try {
+      const res = await this.drive.about.get({ fields: 'user(displayName,emailAddress)' });
+      const user = res.data.user;
+      return { ok: true, message: `Connected as ${user?.displayName} (${user?.emailAddress})` };
+    } catch (err) {
+      return { ok: false, message: `API error: ${err instanceof Error ? err.message : String(err)}` };
+    }
   }
 
   async initialize(_config: Record<string, string>): Promise<void> {
@@ -88,13 +97,108 @@ export class GoogleDrivePlugin implements ConnectorPlugin {
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
 
-    if (clientId && clientSecret && refreshToken) {
-      // TODO: Initialize googleapis OAuth2 client for Drive
-      this.initialized = true;
-    }
+    if (!clientId || !clientSecret || !refreshToken) return;
+
+    this.oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
+    this.oauth2Client.setCredentials({ refresh_token: refreshToken });
+    this.drive = google.drive({ version: 'v3', auth: this.oauth2Client });
   }
 
   async shutdown(): Promise<void> {
-    this.initialized = false;
+    this.oauth2Client = null;
+    this.drive = null;
   }
+
+  private async searchFiles(input: Record<string, unknown>): Promise<unknown> {
+    const query = input.query as string;
+    const res = await this.drive!.files.list({
+      q: `fullText contains '${query.replace(/'/g, "\\'")}'`,
+      pageSize: (input.max_results as number) || 10,
+      fields: 'files(id,name,mimeType,modifiedTime,webViewLink,size)',
+    });
+
+    return { files: (res.data.files ?? []).map(formatFile) };
+  }
+
+  private async getFileContent(input: Record<string, unknown>): Promise<unknown> {
+    const fileId = input.file_id as string;
+
+    // Get file metadata first to check type
+    const meta = await this.drive!.files.get({ fileId, fields: 'mimeType,name' });
+    const mimeType = meta.data.mimeType ?? '';
+
+    // Google Docs/Sheets/Slides: export as plain text
+    if (mimeType.startsWith('application/vnd.google-apps.')) {
+      const exportMime = mimeType.includes('spreadsheet')
+        ? 'text/csv'
+        : 'text/plain';
+      const res = await this.drive!.files.export(
+        { fileId, mimeType: exportMime },
+        { responseType: 'text' }
+      );
+      return { name: meta.data.name, mimeType, content: res.data as string };
+    }
+
+    // Binary/other files: download content
+    const res = await this.drive!.files.get(
+      { fileId, alt: 'media' },
+      { responseType: 'text' }
+    );
+    return { name: meta.data.name, mimeType, content: res.data as string };
+  }
+
+  private async createDocument(input: Record<string, unknown>): Promise<unknown> {
+    const title = input.title as string;
+    const content = input.content as string;
+    const folderId = input.folder_id as string | undefined;
+
+    const parents = folderId ? [folderId] : undefined;
+
+    // Create the file as a Google Doc
+    const res = await this.drive!.files.create({
+      requestBody: {
+        name: title,
+        mimeType: 'application/vnd.google-apps.document',
+        parents,
+      },
+      media: {
+        mimeType: 'text/plain',
+        body: content,
+      },
+      fields: 'id,name,webViewLink',
+    });
+
+    return {
+      file_id: res.data.id,
+      name: res.data.name,
+      webViewLink: res.data.webViewLink,
+    };
+  }
+
+  private async listFiles(input: Record<string, unknown>): Promise<unknown> {
+    const folderId = input.folder_id as string | undefined;
+    const q = folderId
+      ? `'${folderId}' in parents and trashed = false`
+      : 'trashed = false';
+
+    const res = await this.drive!.files.list({
+      q,
+      pageSize: (input.max_results as number) || 20,
+      fields: 'files(id,name,mimeType,modifiedTime,webViewLink,size)',
+      orderBy: 'modifiedTime desc',
+    });
+
+    return { files: (res.data.files ?? []).map(formatFile) };
+  }
+}
+
+function formatFile(file: drive_v3.Schema$File) {
+  return {
+    id: file.id,
+    name: file.name,
+    mimeType: file.mimeType,
+    modifiedTime: file.modifiedTime,
+    webViewLink: file.webViewLink,
+    size: file.size,
+  };
 }

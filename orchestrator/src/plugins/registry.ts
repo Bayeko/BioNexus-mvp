@@ -104,6 +104,39 @@ export class PluginRegistry {
       });
     }
   }
+
+  /** Initialize and enable all connectors that have valid credentials. */
+  async autoEnableConfigured(): Promise<void> {
+    for (const plugin of this.listAll()) {
+      try {
+        await plugin.initialize({});
+        const health = await plugin.healthCheck();
+        this.store.setConnectorState({
+          name: plugin.name,
+          enabled: health.ok,
+          configured: health.ok,
+          lastHealthCheck: { ...health, checkedAt: new Date().toISOString() },
+        });
+        if (health.ok) {
+          console.log(`  ✓ ${plugin.displayName}: ${health.message ?? 'connected'}`);
+        } else {
+          console.log(`  ✗ ${plugin.displayName}: ${health.message ?? 'not configured'}`);
+        }
+      } catch (err) {
+        this.store.setConnectorState({
+          name: plugin.name,
+          enabled: false,
+          configured: false,
+          lastHealthCheck: {
+            ok: false,
+            message: err instanceof Error ? err.message : String(err),
+            checkedAt: new Date().toISOString(),
+          },
+        });
+        console.log(`  ✗ ${plugin.displayName}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
 }
 
 export function createPluginRegistry(store: Store): PluginRegistry {

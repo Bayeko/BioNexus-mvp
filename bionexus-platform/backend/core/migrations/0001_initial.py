@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("auth", "0012_alter_user_first_name_max_length"),
         ("protocols", "0002_protocol_deleted_at_protocol_is_deleted_and_more"),
-        ("samples", "0003_sample_deleted_at_sample_is_deleted_and_more"),
+        ("samples", "0001_initial"),
     ]
 
     operations = [

@@ -12,6 +12,7 @@ import { createWorkflowCreator } from './engine/workflow-creator.js';
 import { createWorkflowRegistry } from './workflows/registry.js';
 import { createScheduler } from './engine/scheduler.js';
 import { runWorkflow } from './workflows/runner.js';
+import { executeProposal } from './engine/executor.js';
 
 // Connector plugins
 import { GoogleCalendarPlugin } from './plugins/google-calendar/index.js';
@@ -37,6 +38,10 @@ async function main(): Promise<void> {
   pluginRegistry.register(new GoogleDrivePlugin());
   pluginRegistry.register(new GitHubPlugin());
 
+  // Initialize and auto-enable connectors with valid credentials
+  console.log('Initializing connectors...');
+  await pluginRegistry.autoEnableConfigured();
+
   // Workflow system
   const workflowRegistry = createWorkflowRegistry();
 
@@ -49,6 +54,7 @@ async function main(): Promise<void> {
     workflowRegistry,
     eventBus,
     workflowCreator,
+    decisionEngine,
   });
   app.use(routes);
   app.use(errorHandler);
@@ -73,7 +79,7 @@ async function main(): Promise<void> {
       return;
     }
     try {
-      await runWorkflow(workflow, { decisionEngine, pluginRegistry, store, sse });
+      await runWorkflow(workflow, { decisionEngine, pluginRegistry, store, sse, eventBus });
     } catch (err) {
       console.error(JSON.stringify({
         timestamp: new Date().toISOString(),
@@ -81,6 +87,24 @@ async function main(): Promise<void> {
         message: `Workflow failed: ${workflow.name}`,
         error: String(err),
       }));
+    }
+  });
+
+  // Wire event bus: approved proposals → execute actions
+  eventBus.on('proposal:approved', async ({ proposalId }) => {
+    try {
+      await executeProposal(proposalId, { store, pluginRegistry, sse });
+    } catch (err) {
+      console.error(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'error',
+        message: `Proposal execution failed: ${proposalId}`,
+        error: String(err),
+      }));
+      store.updateProposalStatus(proposalId, 'failed', {
+        error: `Unexpected error: ${err instanceof Error ? err.message : String(err)}`,
+      });
+      sse.broadcast('proposal:updated', store.getProposal(proposalId));
     }
   });
 

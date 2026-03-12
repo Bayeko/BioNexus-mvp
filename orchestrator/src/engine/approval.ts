@@ -3,7 +3,7 @@ import type { ProposalStatus } from '../store/types.js';
 /** Valid state transitions for proposal lifecycle */
 const VALID_TRANSITIONS: Record<ProposalStatus, ProposalStatus[]> = {
   pending_approval: ['approved', 'rejected'],
-  approved: ['executing'],
+  approved: ['executing', 'rejected'],  // rejected allowed for yellow undo
   rejected: [],
   executing: ['completed', 'failed'],
   completed: [],

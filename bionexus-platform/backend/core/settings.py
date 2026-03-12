@@ -40,10 +40,14 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "django_filters",
     "core",  # Must come before django.contrib.admin (uses custom AUTH_USER_MODEL)
     "django.contrib.admin",
+    "modules.instruments",
     "modules.samples",
+    "modules.measurements",
     "modules.protocols",
+    "modules.persistence",
 ]
 
 MIDDLEWARE = [
@@ -54,6 +58,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.middleware.AuditMiddleware",
 ]
 
 ROOT_URLCONF = "core.urls"
@@ -121,4 +126,19 @@ USE_TZ = True
 STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+
+# --- Persistence / WAL Sync Engine ------------------------------------------
+
+PERSISTENCE = {
+    "BATCH_SIZE": 50,
+    "BATCH_DELAY_MS": 500,
+    "MAX_BURST_PER_MINUTE": 200,
+    "BACKOFF_BASE_S": 1.0,
+    "BACKOFF_MAX_S": 300.0,
+    "BACKOFF_JITTER_S": 0.5,
+    "CLOCK_DRIFT_THRESHOLD_MS": 5000,
+    "SERVER_SLOW_MS": 2000,
+    "SERVER_FAST_MS": 500,
+}
 

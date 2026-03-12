@@ -169,12 +169,12 @@ class BatchExtractionResult(BaseModel):
 
     equipment_records: list[EquipmentData] = Field(
         default_factory=list,
-        max_items=1000,
+        max_length=1000,
         description="Equipment entries extracted",
     )
     sample_records: list[SampleData] = Field(
         default_factory=list,
-        max_items=1000,
+        max_length=1000,
         description="Sample entries extracted",
     )
     extraction_warnings: list[str] = Field(

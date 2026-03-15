@@ -9,11 +9,14 @@ Usage:
     python simulate_equipment.py                  # Interactive menu
     python simulate_equipment.py --auto           # Full demo (all instruments)
     python simulate_equipment.py --equipment pcr  # Single instrument
+    python simulate_equipment.py --live           # LIVE DEMO — real-time data flow
+    python simulate_equipment.py --live --speed 2 # Live demo, 2x faster
 """
 
 import os
 import sys
 import json
+import time
 import random
 import hashlib
 import argparse
@@ -147,6 +150,28 @@ PROTOCOLS = [
 # Core Simulation Logic
 # =============================================================================
 
+def clean_demo_data():
+    """Delete all demo data for a fresh start. Keeps instruments."""
+    print("\n  Cleaning demo data for fresh start...")
+    m_count = Measurement.objects.count()
+    Measurement.objects.all().delete()
+    print(f"  Deleted {m_count} measurements")
+
+    s_count = Sample.objects.count()
+    Sample.objects.all().delete()
+    print(f"  Deleted {s_count} samples")
+
+    a_count = AuditLog.objects.count()
+    AuditLog.objects.all().delete()
+    print(f"  Deleted {a_count} audit records")
+
+    p_count = Protocol.objects.count()
+    Protocol.objects.all().delete()
+    print(f"  Deleted {p_count} protocols")
+
+    print("  Demo data cleaned! Instruments preserved.\n")
+
+
 def get_or_create_tenant():
     tenant, created = Tenant.objects.get_or_create(
         slug="demo-lab",
@@ -220,20 +245,29 @@ def create_protocol():
     return protocol
 
 
-def generate_measurements(instrument, samples, instrument_key):
-    """Generate realistic measurements with SHA-256 data hashes."""
+def generate_measurements(instrument, samples, instrument_key, live_delay=0):
+    """Generate realistic measurements with SHA-256 data hashes.
+
+    Args:
+        live_delay: Seconds between each measurement (0 = instant, >0 = real-time).
+    """
     profiles = MEASUREMENT_PROFILES[instrument_key]
     measurements = []
-    base_time = timezone.now() - timedelta(minutes=random.randint(5, 60))
+    total = len(samples) * len(profiles)
+    count = 0
 
     for i, sample in enumerate(samples):
         # Update sample status
         sample.status = "in_progress"
         sample.save(update_fields=["status"])
 
+        if live_delay > 0:
+            print(f"\n  >> Sample {i+1}/{len(samples)}: {sample.sample_id} — Analyzing...")
+            sys.stdout.flush()
+
         for j, profile in enumerate(profiles):
             value = round(random.uniform(profile["min"], profile["max"]), 6)
-            measured_at = base_time + timedelta(seconds=(i * len(profiles) + j) * 30)
+            measured_at = timezone.now()
 
             measurement = Measurement.objects.create(
                 sample=sample,
@@ -244,12 +278,53 @@ def generate_measurements(instrument, samples, instrument_key):
                 measured_at=measured_at,
             )
             measurements.append(measurement)
+            count += 1
+
+            if live_delay > 0:
+                # Live mode: print each measurement as it arrives
+                print(f"     [{count}/{total}] {profile['parameter']} = {value} {profile['unit']}  "
+                      f"(SHA-256: {measurement.data_hash[:16]}...)")
+                sys.stdout.flush()
+
+                # Record audit immediately for each measurement
+                AuditTrail.record(
+                    entity_type="Measurement",
+                    entity_id=measurement.id,
+                    operation="CREATE",
+                    changes={
+                        "parameter": {"before": None, "after": measurement.parameter},
+                        "value": {"before": None, "after": str(measurement.value)},
+                        "data_hash": {"before": None, "after": measurement.data_hash[:16] + "..."},
+                    },
+                    snapshot_before={},
+                    snapshot_after={
+                        "sample_id": measurement.sample_id,
+                        "instrument_id": measurement.instrument_id,
+                        "parameter": measurement.parameter,
+                        "value": str(measurement.value),
+                        "unit": measurement.unit,
+                        "data_hash": measurement.data_hash,
+                    },
+                    user_id=_live_user.id if _live_user else 1,
+                    user_email=_live_user.email if _live_user else "",
+                )
+
+                # Wait between measurements — this is where the magic happens
+                time.sleep(live_delay)
 
         # Mark sample complete
         sample.status = "completed"
         sample.save(update_fields=["status"])
 
+        if live_delay > 0:
+            print(f"  >> Sample {sample.sample_id} — COMPLETED")
+            sys.stdout.flush()
+
     return measurements
+
+
+# Global ref for live mode audit recording inside generate_measurements
+_live_user = None
 
 
 def record_audit_trail(user, instrument, samples, measurements):
@@ -291,70 +366,145 @@ def record_audit_trail(user, instrument, samples, measurements):
         )
 
 
-def simulate_instrument(instrument_key, auto=False):
-    """Run full simulation for one instrument."""
-    profile = INSTRUMENT_PROFILES[instrument_key]
+def simulate_instrument(instrument_key, auto=False, live_delay=0):
+    """Run full simulation for one instrument.
 
-    print(f"\n{'='*60}")
-    print(f"  SIMULATING: {profile['name']}")
-    print(f"{'='*60}\n")
+    Args:
+        live_delay: If > 0, runs in live mode with delays between measurements.
+    """
+    global _live_user
+    profile = INSTRUMENT_PROFILES[instrument_key]
+    is_live = live_delay > 0
+
+    if is_live:
+        print(f"\n{'='*60}")
+        print(f"  LIVE SIMULATION: {profile['name']}")
+        print(f"  Data will appear in real-time on the dashboard")
+        print(f"  Open http://localhost:3000 to watch")
+        print(f"{'='*60}\n")
+    else:
+        print(f"\n{'='*60}")
+        print(f"  SIMULATING: {profile['name']}")
+        print(f"{'='*60}\n")
 
     tenant = get_or_create_tenant()
     user = get_or_create_user(tenant)
+    _live_user = user
 
     # Step 1: Connect instrument
-    print("[1/5] Connecting instrument...")
+    if is_live:
+        print("[1/4] BioNexus Box connecting to instrument...")
+        time.sleep(live_delay * 0.5)
+    else:
+        print("[1/5] Connecting instrument...")
     instrument = create_instrument(instrument_key)
 
+    if is_live:
+        # Record instrument connection audit
+        AuditTrail.record(
+            entity_type="Instrument",
+            entity_id=instrument.id,
+            operation="UPDATE",
+            changes={"status": {"before": "offline", "after": "online"}},
+            snapshot_before={"status": "offline"},
+            snapshot_after={"status": "online", "name": instrument.name},
+            user_id=user.id,
+            user_email=user.email,
+        )
+        print(f"  >> Instrument ONLINE via {profile['connection_type']}")
+        time.sleep(live_delay)
+
     # Step 2: Register samples
-    print("\n[2/5] Registering samples...")
+    if is_live:
+        print(f"\n[2/4] Receiving samples from {profile['name']}...")
+        time.sleep(live_delay * 0.5)
+    else:
+        print("\n[2/5] Registering samples...")
     samples = create_samples(instrument, user, count=4)
 
+    if is_live:
+        time.sleep(live_delay)
+
     # Step 3: Link protocol
-    print("\n[3/5] Loading protocol...")
+    if not is_live:
+        print("\n[3/5] Loading protocol...")
     protocol = create_protocol()
 
-    # Step 4: Generate measurements
-    print(f"\n[4/5] Running {profile['name']}...")
-    measurements = generate_measurements(instrument, samples, instrument_key)
-    print(f"  Generated {len(measurements)} measurements")
-    for m in measurements[:3]:
-        print(f"    {m.parameter} = {m.value} {m.unit} (hash: {m.data_hash[:12]}...)")
-    if len(measurements) > 3:
-        print(f"    ... and {len(measurements) - 3} more")
+    # Step 4: Generate measurements — the main show for live mode
+    num_params = len(MEASUREMENT_PROFILES[instrument_key])
+    total_measurements = len(samples) * num_params
 
-    # Step 5: Record audit trail
-    print(f"\n[5/5] Recording audit trail...")
-    record_audit_trail(user, instrument, samples, measurements)
+    if is_live:
+        print(f"\n[3/4] Running analysis — {total_measurements} measurements incoming...")
+        print(f"       Watch the dashboard update in real-time!")
+        print(f"       ({len(samples)} samples x {num_params} parameters)")
+    else:
+        print(f"\n[4/5] Running {profile['name']}...")
+
+    measurements = generate_measurements(instrument, samples, instrument_key, live_delay=live_delay)
+
+    if not is_live:
+        print(f"  Generated {len(measurements)} measurements")
+        for m in measurements[:3]:
+            print(f"    {m.parameter} = {m.value} {m.unit} (hash: {m.data_hash[:12]}...)")
+        if len(measurements) > 3:
+            print(f"    ... and {len(measurements) - 3} more")
+
+    # Step 5: Record audit trail (only for non-live — live records inline)
+    if not is_live:
+        print(f"\n[5/5] Recording audit trail...")
+        record_audit_trail(user, instrument, samples, measurements)
+
+    if is_live:
+        print(f"\n[4/4] All data received and hashed.")
+
     audit_count = AuditLog.objects.count()
-    print(f"  {audit_count} audit records total (SHA-256 chain)")
 
     # Summary
     print(f"\n{'='*60}")
     print(f"  SIMULATION COMPLETE")
     print(f"{'='*60}")
     print(f"  Instrument:    {instrument.name}")
+    print(f"  Connection:    {profile['connection_type']} via BioNexus Box")
     print(f"  Samples:       {len(samples)}")
     print(f"  Measurements:  {len(measurements)}")
     print(f"  Audit Records: {audit_count}")
+    if is_live:
+        print(f"  Data Integrity: All {len(measurements)} measurements SHA-256 hashed")
     print(f"{'='*60}\n")
 
     return measurements
 
 
-def run_full_demo():
+def run_full_demo(live_delay=0):
     """Run complete demo with all instruments."""
+    is_live = live_delay > 0
+
     print("\n" + "=" * 60)
-    print("  BIONEXUS FULL DEMO SCENARIO")
-    print("  Simulating a complete laboratory workflow")
+    if is_live:
+        print("  BIONEXUS LIVE DEMO")
+        print("  Real-time data flow from 5 laboratory instruments")
+        print("  Open the dashboard and watch data appear live!")
+    else:
+        print("  BIONEXUS FULL DEMO SCENARIO")
+        print("  Simulating a complete laboratory workflow")
     print("=" * 60)
 
+    if is_live:
+        print("\n  Starting in 3 seconds — switch to the dashboard now!")
+        for i in range(3, 0, -1):
+            print(f"  {i}...")
+            time.sleep(1)
+
     for key in INSTRUMENT_PROFILES:
-        simulate_instrument(key)
+        simulate_instrument(key, live_delay=live_delay)
+        if is_live:
+            print("\n  Next instrument in 2 seconds...\n")
+            time.sleep(2)
 
     # Final stats
     print("\n" + "=" * 60)
-    print("  DEMO SUMMARY")
+    print("  DEMO COMPLETE")
     print("=" * 60)
     print(f"  Instruments:   {Instrument.objects.count()}")
     print(f"  Samples:       {Sample.objects.count()}")
@@ -362,7 +512,40 @@ def run_full_demo():
     print(f"  Measurements:  {Measurement.objects.count()}")
     print(f"  Audit Records: {AuditLog.objects.count()}")
     print("=" * 60)
-    print("\n  Open http://localhost:5173 to see the dashboard!\n")
+    print("\n  Open http://localhost:3000 to see the dashboard!\n")
+
+
+def run_live_demo(speed=1.0, equipment=None, no_prompt=False):
+    """Run live demo with real-time delays.
+
+    Args:
+        speed: Speed multiplier (1.0 = normal ~3s between measurements,
+               2.0 = fast ~1.5s, 0.5 = slow ~6s).
+        equipment: Specific instrument key or None for all.
+        no_prompt: Skip the "Press ENTER" prompt (for .bat calls).
+    """
+    base_delay = 3.0 / speed  # 3 seconds per measurement at normal speed
+
+    print("\n" + "=" * 60)
+    print("  BIONEXUS LIVE DEMO MODE")
+    print("=" * 60)
+    print(f"  Speed:    {'Normal' if speed == 1 else f'{speed}x'} ({base_delay:.1f}s per measurement)")
+    print(f"  Frontend: http://localhost:3000")
+    print("=" * 60)
+
+    if not no_prompt:
+        print(f"  Tip:      Open the dashboard BEFORE pressing Enter!")
+        input("\n  Press ENTER to start the live demo...")
+    else:
+        print("\n  Starting in 3 seconds — switch to the dashboard!")
+        for i in range(3, 0, -1):
+            print(f"  {i}...")
+            time.sleep(1)
+
+    if equipment:
+        simulate_instrument(equipment, live_delay=base_delay)
+    else:
+        run_full_demo(live_delay=base_delay)
 
 
 def interactive_menu():
@@ -370,17 +553,23 @@ def interactive_menu():
     print("  BIONEXUS EQUIPMENT SIMULATOR")
     print("=" * 60)
     print()
-    print("  Choose an instrument to simulate:\n")
+    print("  Choose a mode:\n")
     keys = list(INSTRUMENT_PROFILES.keys())
+    print("  --- LIVE DEMO (real-time, for client demos) ---")
+    print("  L. LIVE DEMO — All instruments (watch dashboard update!)")
+    print()
+    print("  --- INSTANT (batch load, for testing) ---")
     for i, key in enumerate(keys, 1):
         print(f"  {i}. {INSTRUMENT_PROFILES[key]['name']}")
-    print(f"  {len(keys)+1}. FULL DEMO (all instruments)")
+    print(f"  {len(keys)+1}. FULL BATCH (all instruments, instant)")
     print("  0. Exit")
     print()
 
-    choice = input("  Your choice: ").strip()
+    choice = input("  Your choice: ").strip().upper()
 
-    if choice == str(len(keys) + 1):
+    if choice == "L":
+        run_live_demo(speed=1.0)
+    elif choice == str(len(keys) + 1):
         run_full_demo()
     elif choice == "0":
         print("  Bye!")
@@ -392,13 +581,26 @@ def interactive_menu():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="BioNexus Equipment Simulator")
-    parser.add_argument("--auto", action="store_true", help="Run full demo automatically")
-    parser.add_argument("--equipment", choices=INSTRUMENT_PROFILES.keys(), help="Simulate specific instrument")
+    parser.add_argument("--auto", action="store_true", help="Run full demo (instant batch)")
+    parser.add_argument("--live", action="store_true", help="LIVE DEMO: real-time data flow")
+    parser.add_argument("--clean", action="store_true",
+                        help="Clean all demo data before starting (fresh start)")
+    parser.add_argument("--speed", type=float, default=1.0,
+                        help="Live demo speed multiplier (default: 1.0, use 2 for faster)")
+    parser.add_argument("--no-prompt", action="store_true",
+                        help="Skip interactive prompts (for .bat launcher)")
+    parser.add_argument("--equipment", choices=INSTRUMENT_PROFILES.keys(),
+                        help="Simulate specific instrument")
     args = parser.parse_args()
 
-    if args.auto:
+    if args.clean:
+        clean_demo_data()
+
+    if args.live:
+        run_live_demo(speed=args.speed, equipment=args.equipment, no_prompt=args.no_prompt)
+    elif args.auto:
         run_full_demo()
     elif args.equipment:
         simulate_instrument(args.equipment)
-    else:
+    elif not args.clean:
         interactive_menu()

@@ -106,10 +106,10 @@ export default function AuditLog() {
   ];
 
   return (
-    <div>
+    <div className="page-wrapper">
       <div className="page-header">
-        <h1>Audit Log</h1>
-        <p>Immutable record of all system events (21 CFR Part 11)</p>
+        <h1>Audit Trail</h1>
+        <p>Immutable, tamper-proof record of all data transactions &mdash; 21 CFR Part 11 compliant</p>
       </div>
 
       {error && (

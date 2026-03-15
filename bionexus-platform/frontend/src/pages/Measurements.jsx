@@ -104,7 +104,7 @@ export default function Measurements() {
   if (loading) return <div className="loading">Loading measurements...</div>;
 
   return (
-    <div>
+    <div className="page-wrapper">
       <Link to="/samples" className="back-link">
         &#8592; Back to Samples
       </Link>

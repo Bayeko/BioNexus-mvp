@@ -30,13 +30,26 @@ export function fetchInstruments() {
   return request('/api/instruments/');
 }
 
+export async function createInstrument(data) {
+  const res = await fetch('/api/instruments/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Create failed ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
 // --- Samples ---
 
 export function fetchSamples(filters = {}) {
   const mapped = {};
   if (filters.instrument) mapped.instrument = filters.instrument;
   if (filters.status) mapped.status = filters.status;
-  if (filters.batch_number) mapped.batch_number = filters.batch_number;
+  if (filters.batch_number) mapped.batch_number__icontains = filters.batch_number;
   if (filters.date) mapped['created_at__date'] = filters.date;
   return request(`/api/samples/${buildQS(mapped)}`);
 }

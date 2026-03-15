@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchSamples, fetchInstruments } from '../api';
 import DataTable from '../components/DataTable';
@@ -23,6 +23,15 @@ export default function Samples() {
   const [statusFilter, setStatusFilter] = useState('');
   const [instrumentFilter, setInstrumentFilter] = useState('');
   const [batchFilter, setBatchFilter] = useState('');
+  const [batchInput, setBatchInput] = useState('');
+  const batchTimerRef = useRef(null);
+
+  // Debounce batch filter (wait 400ms after typing stops)
+  function handleBatchChange(val) {
+    setBatchInput(val);
+    if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
+    batchTimerRef.current = setTimeout(() => setBatchFilter(val), 400);
+  }
 
   const instrumentMap = {};
   instruments.forEach((inst) => {
@@ -78,10 +87,10 @@ export default function Samples() {
   ];
 
   return (
-    <div>
+    <div className="page-wrapper">
       <div className="page-header">
         <h1>Sample Tracking</h1>
-        <p>Track samples through the laboratory workflow</p>
+        <p>Full traceability of every sample through your laboratory workflow &mdash; from receipt to result</p>
       </div>
 
       {error && (
@@ -121,8 +130,8 @@ export default function Samples() {
           className="filter-input"
           type="text"
           placeholder="Batch number..."
-          value={batchFilter}
-          onChange={(e) => setBatchFilter(e.target.value)}
+          value={batchInput}
+          onChange={(e) => handleBatchChange(e.target.value)}
         />
       </div>
 

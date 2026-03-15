@@ -12,9 +12,19 @@ function formatTick(val) {
   return val.toFixed(4);
 }
 
-function formatTime(iso) {
+function formatTime(iso, sameDay) {
   const d = new Date(iso);
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  if (sameDay) {
+    // All data within same day → show time only
+    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+  // Data spans multiple days → show date + time
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export default function MeasurementChart({ measurements, unit }) {
@@ -45,6 +55,14 @@ export default function MeasurementChart({ measurements, unit }) {
   const maxTime = Math.max(...times);
   const timeRange = maxTime - minTime || 1;
 
+  // Detect if all data points fall on the same calendar day
+  const firstDate = new Date(minTime);
+  const lastDate = new Date(maxTime);
+  const sameDay =
+    firstDate.getFullYear() === lastDate.getFullYear() &&
+    firstDate.getMonth() === lastDate.getMonth() &&
+    firstDate.getDate() === lastDate.getDate();
+
   function x(t) {
     return PAD.left + ((t - minTime) / timeRange) * PLOT_W;
   }
@@ -73,7 +91,7 @@ export default function MeasurementChart({ measurements, unit }) {
   const xTicks = [];
   for (let i = 0; i < xTickCount; i++) {
     const idx = Math.round((i / (xTickCount - 1)) * (sorted.length - 1));
-    xTicks.push({ label: formatTime(sorted[idx].measured_at), px: x(times[idx]) });
+    xTicks.push({ label: formatTime(sorted[idx].measured_at, sameDay), px: x(times[idx]) });
   }
 
   return (

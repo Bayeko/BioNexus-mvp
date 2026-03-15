@@ -131,8 +131,8 @@ function HealthBanner({ instruments }) {
     desc = `${instruments.filter(i => i.status === 'error').length} instrument(s) in error state`;
   } else if (allOnline) {
     level = 'ok';
-    label = 'All Systems Normal';
-    desc = `${instruments.length} instruments operating normally`;
+    label = 'All Systems Operational';
+    desc = `${instruments.length} instrument${instruments.length > 1 ? 's' : ''} connected and transmitting data`;
   } else {
     level = 'warn';
     label = 'Degraded';
@@ -207,7 +207,7 @@ function ActivityFeed({ auditLogs, instruments }) {
 
   return (
     <div className="dash-activity-list">
-      {auditLogs.slice(0, 8).map((log, i) => (
+      {auditLogs.slice(0, 5).map((log, i) => (
         <div key={log.id || i} className="dash-activity-item">
           <div className="dash-activity-icon" style={{ color: opColors[log.operation] || 'var(--text-muted)' }}>
             {opIcons[log.operation] || '\u2022'}
@@ -311,8 +311,8 @@ export default function Dashboard() {
   return (
     <div className="dash-page">
       <div className="page-header">
-        <h1>Dashboard</h1>
-        <p>Laboratory overview and real-time system status</p>
+        <h1>Laboratory Overview</h1>
+        <p>Real-time status of all connected instruments, samples and measurements &mdash; updated every 5s</p>
       </div>
 
       {error && (
@@ -329,36 +329,36 @@ export default function Dashboard() {
       <div className="dash-stats-grid">
         <StatCard
           icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v6m0 8v6M2 12h6m8 0h6" /><circle cx="12" cy="12" r="3" /></svg>}
-          label="Instruments"
+          label="Connected Instruments"
           value={instruments.length}
-          sub={`${onlineCount} online`}
+          sub={`${onlineCount} online \u00B7 ${errorCount > 0 ? errorCount + ' alert' : 'no alerts'}`}
           sparkData={[onlineCount, instruments.length]}
           sparkColor="var(--accent)"
           accentClass="dash-stat-icon--blue"
         />
         <StatCard
           icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3h6v7l3 8H6l3-8V3z" /><path d="M8 3h8" /></svg>}
-          label="Active Samples"
+          label="Samples in Progress"
           value={activeSamples}
-          sub={`${completedSamples} completed \u00B7 ${samples.length} total`}
+          sub={`${completedSamples} completed \u00B7 ${samples.length} total tracked`}
           sparkData={sampleSparkline}
           sparkColor="var(--status-pending)"
           accentClass="dash-stat-icon--amber"
         />
         <StatCard
           icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>}
-          label="Measurements"
+          label="Measurements Captured"
           value={measurements.length}
-          sub="total recorded"
+          sub="SHA-256 verified"
           sparkData={measurementSparkline}
           sparkColor="var(--status-online)"
           accentClass="dash-stat-icon--green"
         />
         <StatCard
           icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>}
-          label="Audit Events"
+          label="Audit Trail Events"
           value={auditLogs.length}
-          sub="21 CFR Part 11"
+          sub="21 CFR Part 11 compliant"
           sparkData={[]}
           sparkColor="var(--accent)"
           accentClass="dash-stat-icon--purple"

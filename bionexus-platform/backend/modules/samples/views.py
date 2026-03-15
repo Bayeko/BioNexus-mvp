@@ -34,7 +34,7 @@ class SampleViewSet(viewsets.ModelViewSet):
     filterset_fields = {
         "instrument": ["exact"],
         "status": ["exact"],
-        "batch_number": ["exact"],
+        "batch_number": ["exact", "icontains"],
         "created_at": ["date", "gte", "lte"],
     }
 

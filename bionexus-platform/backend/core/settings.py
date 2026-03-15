@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "django_filters",
+    "drf_spectacular",
     "core",  # Must come before django.contrib.admin (uses custom AUTH_USER_MODEL)
     "django.contrib.admin",
     "modules.instruments",
@@ -108,6 +109,26 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
+    ],
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+    ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "BioNexus API",
+    "DESCRIPTION": "Laboratory data integration platform — REST API for instruments, samples, measurements, audit trail, exports, and webhooks.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "TAGS": [
+        {"name": "Instruments", "description": "Laboratory instrument registration and monitoring"},
+        {"name": "Samples", "description": "Sample tracking and lifecycle management"},
+        {"name": "Measurements", "description": "Measurement data capture with SHA-256 integrity"},
+        {"name": "Audit Trail", "description": "Immutable audit log — 21 CFR Part 11 compliant"},
+        {"name": "Export", "description": "CSV/PDF export for LIMS integration"},
+        {"name": "Webhooks", "description": "Event notifications for external systems"},
+        {"name": "Smart Parser", "description": "CSV file parsing and instrument detection"},
     ],
 }
 

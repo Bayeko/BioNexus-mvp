@@ -1,0 +1,17 @@
+Instrument: Shimadzu UV-1900i Spectrophotometer
+Serial_Number: A114562890
+Location: QC Lab - Room 105
+Method: Bradford Protein Assay (595 nm)
+Analyst: S. Nakamura
+Date: 2026-03-12
+
+Sample_ID,Sample_Name,Type,Wavelength_nm,Absorbance,Concentration_mg_mL,Operator,Storage_Temp,Quantity,Quantity_Unit
+UV-2026-041,BSA Standard 0.125 mg/mL,serum,595,0.182,0.125,S. Nakamura,4,1.0,mL
+UV-2026-042,BSA Standard 0.250 mg/mL,serum,595,0.341,0.250,S. Nakamura,4,1.0,mL
+UV-2026-043,BSA Standard 0.500 mg/mL,serum,595,0.658,0.500,S. Nakamura,4,1.0,mL
+UV-2026-044,BSA Standard 1.000 mg/mL,serum,595,1.287,1.000,S. Nakamura,4,1.0,mL
+UV-2026-045,BSA Standard 2.000 mg/mL,serum,595,2.103,2.000,S. Nakamura,4,1.0,mL
+UV-2026-046,mAb Drug Substance Lot DS-881,plasma,595,0.892,0.683,S. Nakamura,-20,0.5,mL
+UV-2026-047,mAb Drug Substance Lot DS-882,plasma,595,0.901,0.690,S. Nakamura,-20,0.5,mL
+UV-2026-048,mAb Drug Product Batch DP-2026-003,plasma,595,0.445,0.341,S. Nakamura,4,2.0,mL
+UV-2026-049,Process Blank (Buffer Only),other,595,0.003,0.000,S. Nakamura,4,1.0,mL

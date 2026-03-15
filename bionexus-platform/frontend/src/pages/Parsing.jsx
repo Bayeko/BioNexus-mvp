@@ -102,7 +102,7 @@ function UploadZone({ onUploaded, uploading, setUploading }) {
         )}
       </div>
       <div className="parse-upload-hint">
-        CSV, TXT, XLSX, PDF, JSON &mdash; AI extraction is simulated for demo
+        CSV, TXT, XLSX, PDF, JSON &mdash; Automatic format recognition
       </div>
       {error && <div className="parse-upload-error">{error}</div>}
     </div>
@@ -300,7 +300,7 @@ function ReviewPanel({ item, onClose, onAction }) {
           <div className="parse-review-section-header">
             <h4>
               {isPending
-                ? 'AI Extraction (Review & Edit)'
+                ? 'Extracted Data (Review & Edit)'
                 : item.state === 'validated'
                   ? 'Confirmed Data'
                   : 'Extracted Data (Rejected)'}
@@ -470,10 +470,10 @@ export default function Parsing() {
   return (
     <div className="parse-page">
       <div className="page-header">
-        <h1>AI Parsing &amp; Validation</h1>
+        <h1>Smart Parser &amp; Validation</h1>
         <p>
-          Upload instrument files for AI extraction, then review and validate
-          before acceptance
+          Upload instrument data files for automatic format recognition, review
+          and validate before acceptance into the audit trail
         </p>
       </div>
 
@@ -501,8 +501,8 @@ export default function Parsing() {
         <div className="parse-pipeline-arrow">&rarr;</div>
         <div className="parse-pipeline-step parse-pipeline-step--ai">
           <div className="parse-pipeline-num">2</div>
-          <div className="parse-pipeline-label">AI Extract</div>
-          <div className="parse-pipeline-desc">GPT-4 analysis</div>
+          <div className="parse-pipeline-label">Smart Extract</div>
+          <div className="parse-pipeline-desc">Format recognition</div>
         </div>
         <div className="parse-pipeline-arrow">&rarr;</div>
         <div className="parse-pipeline-step parse-pipeline-step--review">

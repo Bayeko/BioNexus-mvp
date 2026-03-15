@@ -325,6 +325,18 @@ class CertificationSigningViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Require signature_meaning (21 CFR Part 11 §11.50)
+        signature_meaning = request.data.get('signature_meaning')
+        valid_meanings = [c[0] for c in CertifiedReport.SIGNATURE_MEANING_CHOICES]
+        if not signature_meaning or signature_meaning not in valid_meanings:
+            return Response(
+                {
+                    "error": "signature_meaning is required",
+                    "valid_choices": valid_meanings,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Double authentication: Re-verify password
         password = request.data.get('password')
         if not request.user.check_password(password):
@@ -344,11 +356,30 @@ class CertificationSigningViewSet(viewsets.ViewSet):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        # Optional: OTP verification (if enabled)
-        otp_code = request.data.get('otp_code')
-        if otp_code:
-            # Verify OTP (implementation depends on OTP library)
-            pass
+        # TOTP verification (required when user has TOTP enabled)
+        if request.user.totp_enabled:
+            otp_code = request.data.get('otp_code')
+            if not otp_code:
+                return Response(
+                    {"error": "otp_code is required when TOTP is enabled"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not request.user.verify_totp(otp_code):
+                # Log failed OTP attempt in audit trail
+                AuditTrail.record(
+                    entity_type="CertifiedReport",
+                    entity_id=report.id,
+                    operation="UPDATE",
+                    changes={"failed_otp_attempt": {"before": 0, "after": 1}},
+                    snapshot_before={},
+                    snapshot_after={"error": "Failed TOTP verification"},
+                    user_id=request.user.id,
+                    user_email=request.user.email,
+                )
+                return Response(
+                    {"error": "Invalid OTP code"},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
 
         # Sign the report
         notes = request.data.get('notes', '')
@@ -356,7 +387,10 @@ class CertificationSigningViewSet(viewsets.ViewSet):
         report.certified_by = request.user
         report.certified_at = timezone.now()
         report.state = CertifiedReport.CERTIFIED
-        report.save(update_fields=['certified_by', 'certified_at', 'state'])
+        report.signature_meaning = signature_meaning
+        report.save(update_fields=[
+            'certified_by', 'certified_at', 'state', 'signature_meaning',
+        ])
 
         # Record in audit trail (non-repudiation)
         AuditTrail.record(
@@ -372,6 +406,7 @@ class CertificationSigningViewSet(viewsets.ViewSet):
                 "state": CertifiedReport.CERTIFIED,
                 "signed_by": request.user.username,
                 "signed_at": report.certified_at.isoformat(),
+                "signature_meaning": signature_meaning,
                 "notes": notes,
             },
             user_id=request.user.id,
@@ -388,6 +423,84 @@ class CertificationSigningViewSet(viewsets.ViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class TOTPViewSet(viewsets.ViewSet):
+    """ViewSet for TOTP two-factor authentication setup and verification.
+
+    Endpoints:
+    - POST /api/totp/setup/ - Generate TOTP secret and QR code URI
+    - POST /api/totp/verify/ - Verify code and activate TOTP
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['post'])
+    def setup(self, request):
+        """Generate a new TOTP secret and return provisioning URI."""
+        user = request.user
+        secret = user.generate_totp_secret()
+        uri = user.get_totp_uri()
+
+        # Generate QR code as base64 PNG
+        import qrcode
+        import io
+        import base64
+
+        qr = qrcode.make(uri)
+        buffer = io.BytesIO()
+        qr.save(buffer, format="PNG")
+        qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+
+        return Response({
+            "secret": secret,
+            "uri": uri,
+            "qr_code": f"data:image/png;base64,{qr_base64}",
+            "message": "Scan the QR code with your authenticator app, then verify with /api/totp/verify/",
+        })
+
+    @action(detail=False, methods=['post'])
+    def verify(self, request):
+        """Verify a TOTP code and activate 2FA for the user."""
+        user = request.user
+        code = request.data.get('otp_code')
+
+        if not code:
+            return Response(
+                {"error": "otp_code is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not user.totp_secret:
+            return Response(
+                {"error": "TOTP not set up. Call /api/totp/setup/ first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if user.verify_totp(code):
+            user.totp_enabled = True
+            user.totp_verified_at = timezone.now()
+            user.save(update_fields=["totp_enabled", "totp_verified_at"])
+            return Response({
+                "message": "TOTP verified and enabled",
+                "totp_enabled": True,
+            })
+        else:
+            # Log failed OTP attempt
+            AuditTrail.record(
+                entity_type="User",
+                entity_id=user.id,
+                operation="UPDATE",
+                changes={"failed_totp_setup_attempt": {"before": 0, "after": 1}},
+                snapshot_before={},
+                snapshot_after={"error": "Failed TOTP verification during setup"},
+                user_id=user.id,
+                user_email=user.email,
+            )
+            return Response(
+                {"error": "Invalid OTP code"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
 
 
 # API URL configuration

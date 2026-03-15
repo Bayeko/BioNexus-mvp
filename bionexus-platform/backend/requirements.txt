@@ -1,4 +1,9 @@
 django==5.2.5
 djangorestframework==3.16.1
+django-filter==25.1
+drf-spectacular==0.29.0
+requests>=2.31.0
+pyotp==2.9.0
+qrcode[pil]==8.0
 pytest==8.4.1
 pytest-django==4.11.1

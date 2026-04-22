@@ -1,0 +1,648 @@
+#!/usr/bin/env python3
+"""BioNexus Box Collector — Gateway bridge between lab instruments and cloud.
+
+Listens on RS232/USB (or TCP socket for demo) for instrument data,
+parses it, computes SHA-256 integrity hash, and POSTs to the BioNexus
+cloud API via /api/persistence/capture/.
+
+Offline-safe: if the cloud is unreachable, measurements are stored in
+a local SQLite queue and retried with exponential backoff on reconnect.
+
+Usage:
+    # Listen on TCP socket (demo mode — receives from simulate_instrument.py)
+    python box_collector.py --mode tcp --port 9600
+
+    # Listen on RS232 serial port (production)
+    python box_collector.py --mode serial --device /dev/ttyUSB0 --baud 9600
+
+    # With custom API target
+    python box_collector.py --mode tcp --port 9600 --api-url http://192.168.1.100:8000
+"""
+
+import argparse
+import hashlib
+import json
+import logging
+import os
+import re
+import signal
+import socket
+import sqlite3
+import sys
+import threading
+import time
+import uuid
+from datetime import datetime, timezone
+from typing import Optional
+
+try:
+    import requests
+except ImportError:
+    print("ERROR: 'requests' package required. Install with: pip install requests")
+    sys.exit(1)
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+API_BASE_URL = os.getenv("BIONEXUS_API_URL", "http://localhost:8000")
+CAPTURE_ENDPOINT = "/api/persistence/capture/"
+DEVICE_ID = os.getenv("BIONEXUS_DEVICE_ID", "box-gateway-001")
+
+# SQLite offline queue
+DB_PATH = os.getenv("BIONEXUS_QUEUE_DB", "/var/lib/bionexus/queue.db")
+if not os.path.isdir(os.path.dirname(DB_PATH)):
+    DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "queue.db")
+
+# Retry settings
+BACKOFF_BASE_S = 1.0
+BACKOFF_MAX_S = 300.0
+BACKOFF_JITTER_S = 0.5
+MAX_RETRIES = 10
+SYNC_INTERVAL_S = 5.0
+
+# Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+log = logging.getLogger("box_collector")
+
+# Graceful shutdown
+_shutdown = threading.Event()
+
+
+def _signal_handler(sig, frame):
+    log.info("Shutdown signal received, finishing current work...")
+    _shutdown.set()
+
+
+signal.signal(signal.SIGINT, _signal_handler)
+signal.signal(signal.SIGTERM, _signal_handler)
+
+
+# ---------------------------------------------------------------------------
+# Parsers — Mettler SICS, Sartorius SBI, Generic CSV
+# ---------------------------------------------------------------------------
+
+class MettlerSICSParser:
+    """Parse Mettler Toledo SICS (Standard Interface Command Set) responses.
+
+    Typical balance output:
+        S S     12.3456 g       (stable weight)
+        S D     12.3400 g       (dynamic/unstable weight)
+        ES                       (error: overload, etc.)
+
+    Format: <status> <stability> <value> <unit>
+    """
+
+    PATTERN = re.compile(
+        r"^([A-Z]+)\s+([A-Z])\s+([-\d.]+)\s+(\S+)\s*$"
+    )
+
+    @staticmethod
+    def can_parse(line: str) -> bool:
+        return bool(MettlerSICSParser.PATTERN.match(line.strip()))
+
+    @staticmethod
+    def parse(line: str, instrument_id: int, sample_id: int) -> Optional[dict]:
+        m = MettlerSICSParser.PATTERN.match(line.strip())
+        if not m:
+            return None
+
+        cmd, stability, value_str, unit = m.groups()
+
+        if cmd in ("ES", "EL", "ET"):  # Errors
+            log.warning("Mettler error response: %s", line.strip())
+            return None
+
+        raw_bytes = line.encode("utf-8")
+        data_hash = hashlib.sha256(raw_bytes).hexdigest()
+        now = datetime.now(timezone.utc)
+
+        return {
+            "idempotency_key": str(uuid.uuid4()),
+            "sample_id": sample_id,
+            "instrument_id": instrument_id,
+            "parameter": "weight",
+            "value": value_str,
+            "unit": unit,
+            "data_hash": data_hash,
+            "source_timestamp": now.isoformat(),
+            "hub_received_at": now.isoformat(),
+            "metadata": {
+                "protocol": "SICS",
+                "command": cmd,
+                "stability": "stable" if stability == "S" else "dynamic",
+            },
+        }
+
+
+class SartoriusSBIParser:
+    """Parse Sartorius SBI (Simple Balance Interface) output.
+
+    Format: <stability><sign><value><unit><CR><LF>
+    Example: +  100.0000 g
+             -    5.1234 g
+    """
+
+    PATTERN = re.compile(
+        r"^([+-]?)\s*([\d.]+)\s+(\S+)\s*$"
+    )
+
+    @staticmethod
+    def can_parse(line: str) -> bool:
+        return bool(SartoriusSBIParser.PATTERN.match(line.strip()))
+
+    @staticmethod
+    def parse(line: str, instrument_id: int, sample_id: int) -> Optional[dict]:
+        m = SartoriusSBIParser.PATTERN.match(line.strip())
+        if not m:
+            return None
+
+        sign, value_str, unit = m.groups()
+        if sign == "-":
+            value_str = "-" + value_str
+
+        raw_bytes = line.encode("utf-8")
+        data_hash = hashlib.sha256(raw_bytes).hexdigest()
+        now = datetime.now(timezone.utc)
+
+        return {
+            "idempotency_key": str(uuid.uuid4()),
+            "sample_id": sample_id,
+            "instrument_id": instrument_id,
+            "parameter": "weight",
+            "value": value_str,
+            "unit": unit,
+            "data_hash": data_hash,
+            "source_timestamp": now.isoformat(),
+            "hub_received_at": now.isoformat(),
+            "metadata": {
+                "protocol": "SBI",
+                "stability": "stable",
+            },
+        }
+
+
+class GenericCSVParser:
+    """Parse generic CSV instrument output.
+
+    Format: <parameter>,<value>,<unit>
+    Example: pH,7.42,pH
+             temperature,25.1,°C
+    """
+
+    @staticmethod
+    def can_parse(line: str) -> bool:
+        parts = line.strip().split(",")
+        if len(parts) >= 3:
+            try:
+                float(parts[1])
+                return True
+            except ValueError:
+                return False
+        return False
+
+    @staticmethod
+    def parse(line: str, instrument_id: int, sample_id: int) -> Optional[dict]:
+        parts = line.strip().split(",")
+        if len(parts) < 3:
+            return None
+
+        parameter = parts[0].strip()
+        value_str = parts[1].strip()
+        unit = parts[2].strip()
+
+        raw_bytes = line.encode("utf-8")
+        data_hash = hashlib.sha256(raw_bytes).hexdigest()
+        now = datetime.now(timezone.utc)
+
+        return {
+            "idempotency_key": str(uuid.uuid4()),
+            "sample_id": sample_id,
+            "instrument_id": instrument_id,
+            "parameter": parameter,
+            "value": value_str,
+            "unit": unit,
+            "data_hash": data_hash,
+            "source_timestamp": now.isoformat(),
+            "hub_received_at": now.isoformat(),
+            "metadata": {
+                "protocol": "CSV",
+            },
+        }
+
+
+# Parser dispatch — try each parser in order
+PARSERS = [MettlerSICSParser, SartoriusSBIParser, GenericCSVParser]
+
+
+def parse_line(line: str, instrument_id: int, sample_id: int) -> Optional[dict]:
+    """Try all parsers, return first match."""
+    for parser in PARSERS:
+        if parser.can_parse(line):
+            result = parser.parse(line, instrument_id, sample_id)
+            if result:
+                log.info(
+                    "Parsed [%s]: %s = %s %s (hash: %s...)",
+                    parser.__name__,
+                    result["parameter"],
+                    result["value"],
+                    result["unit"],
+                    result["data_hash"][:12],
+                )
+                return result
+    log.warning("No parser matched line: %r", line.strip())
+    return None
+
+
+# ---------------------------------------------------------------------------
+# SQLite Offline Queue
+# ---------------------------------------------------------------------------
+
+def init_db(db_path: str) -> sqlite3.Connection:
+    """Initialize local SQLite queue for offline buffering."""
+    os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS pending_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            idempotency_key TEXT UNIQUE NOT NULL,
+            payload TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            retry_count INTEGER DEFAULT 0,
+            last_error TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_pending_status
+        ON pending_queue (status, created_at)
+    """)
+    conn.commit()
+    log.info("SQLite queue initialized: %s (WAL mode)", db_path)
+    return conn
+
+
+def queue_measurement(conn: sqlite3.Connection, measurement: dict) -> None:
+    """Store measurement in local offline queue."""
+    payload = json.dumps(measurement, default=str)
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO pending_queue (idempotency_key, payload) VALUES (?, ?)",
+            (measurement["idempotency_key"], payload),
+        )
+        conn.commit()
+        log.debug("Queued: %s", measurement["idempotency_key"][:8])
+    except sqlite3.Error as e:
+        log.error("SQLite queue error: %s", e)
+
+
+def get_pending(conn: sqlite3.Connection, limit: int = 50) -> list:
+    """Get pending measurements ready for sync."""
+    cursor = conn.execute(
+        """SELECT id, idempotency_key, payload, retry_count
+           FROM pending_queue
+           WHERE status IN ('pending', 'failed')
+           ORDER BY created_at ASC
+           LIMIT ?""",
+        (limit,),
+    )
+    return cursor.fetchall()
+
+
+def mark_synced(conn: sqlite3.Connection, row_id: int) -> None:
+    conn.execute(
+        "UPDATE pending_queue SET status='synced', updated_at=datetime('now') WHERE id=?",
+        (row_id,),
+    )
+    conn.commit()
+
+
+def mark_failed(conn: sqlite3.Connection, row_id: int, error: str) -> None:
+    conn.execute(
+        """UPDATE pending_queue
+           SET status='failed', retry_count=retry_count+1,
+               last_error=?, updated_at=datetime('now')
+           WHERE id=?""",
+        (error, row_id),
+    )
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Cloud Sync — Push queued measurements to API
+# ---------------------------------------------------------------------------
+
+def push_to_cloud(api_url: str, measurement: dict) -> bool:
+    """POST a single measurement to /api/persistence/capture/."""
+    url = f"{api_url.rstrip('/')}{CAPTURE_ENDPOINT}"
+    payload = {k: v for k, v in measurement.items() if k != "metadata"}
+
+    try:
+        resp = requests.post(
+            url,
+            json=payload,
+            headers={
+                "Content-Type": "application/json",
+                "X-Device-ID": DEVICE_ID,
+            },
+            timeout=10,
+        )
+        if resp.status_code in (200, 201):
+            log.info(
+                "  -> Cloud OK (%d): %s = %s %s",
+                resp.status_code,
+                measurement["parameter"],
+                measurement["value"],
+                measurement["unit"],
+            )
+            return True
+        else:
+            log.warning("  -> Cloud %d: %s", resp.status_code, resp.text[:200])
+            return False
+    except requests.exceptions.ConnectionError:
+        log.warning("  -> Cloud OFFLINE — buffered locally")
+        return False
+    except requests.exceptions.Timeout:
+        log.warning("  -> Cloud TIMEOUT — will retry")
+        return False
+    except Exception as e:
+        log.error("  -> Cloud ERROR: %s", e)
+        return False
+
+
+def backoff_delay(retry_count: int) -> float:
+    """Exponential backoff with jitter."""
+    import random
+    delay = min(BACKOFF_BASE_S * (2 ** retry_count), BACKOFF_MAX_S)
+    jitter = random.uniform(-BACKOFF_JITTER_S, BACKOFF_JITTER_S)
+    return max(0.1, delay + jitter)
+
+
+def sync_loop(conn: sqlite3.Connection, api_url: str) -> None:
+    """Background thread: push pending measurements to cloud."""
+    log.info("Sync thread started (interval: %.1fs)", SYNC_INTERVAL_S)
+
+    while not _shutdown.is_set():
+        pending = get_pending(conn, limit=50)
+
+        if pending:
+            log.info("Syncing %d pending measurement(s)...", len(pending))
+
+        for row_id, idem_key, payload_json, retry_count in pending:
+            if _shutdown.is_set():
+                break
+
+            if retry_count > 0:
+                delay = backoff_delay(retry_count)
+                if retry_count > MAX_RETRIES:
+                    log.error(
+                        "Max retries (%d) exceeded for %s — dead-lettered",
+                        MAX_RETRIES, idem_key[:8],
+                    )
+                    conn.execute(
+                        "UPDATE pending_queue SET status='dead' WHERE id=?",
+                        (row_id,),
+                    )
+                    conn.commit()
+                    continue
+
+            measurement = json.loads(payload_json)
+            if push_to_cloud(api_url, measurement):
+                mark_synced(conn, row_id)
+            else:
+                mark_failed(conn, row_id, "cloud_unreachable")
+
+        _shutdown.wait(timeout=SYNC_INTERVAL_S)
+
+    log.info("Sync thread stopped")
+
+
+# ---------------------------------------------------------------------------
+# Input Listeners — TCP Socket or Serial Port
+# ---------------------------------------------------------------------------
+
+def listen_tcp(
+    port: int,
+    instrument_id: int,
+    sample_id: int,
+    conn: sqlite3.Connection,
+    api_url: str,
+    db_path: str = "",
+) -> None:
+    """Listen for instrument data on TCP socket (demo mode)."""
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.settimeout(1.0)
+    server.bind(("0.0.0.0", port))
+    server.listen(1)
+
+    log.info("=" * 60)
+    log.info("BioNexus Box Collector — TCP mode")
+    log.info("Listening on port %d for instrument data...", port)
+    log.info("API target: %s", api_url)
+    log.info("Offline queue: %s", db_path)
+    log.info("=" * 60)
+
+    while not _shutdown.is_set():
+        try:
+            client, addr = server.accept()
+            log.info("Instrument connected from %s", addr)
+            buffer = ""
+
+            client.settimeout(1.0)
+            while not _shutdown.is_set():
+                try:
+                    data = client.recv(1024)
+                    if not data:
+                        log.info("Instrument disconnected")
+                        break
+
+                    buffer += data.decode("utf-8", errors="replace")
+
+                    while "\n" in buffer:
+                        line, buffer = buffer.split("\n", 1)
+                        line = line.strip()
+                        if not line:
+                            continue
+
+                        measurement = parse_line(
+                            line, instrument_id, sample_id
+                        )
+                        if measurement:
+                            queue_measurement(conn, measurement)
+                            # Try immediate push (non-blocking)
+                            if not push_to_cloud(api_url, measurement):
+                                log.info(
+                                    "  -> Buffered offline (%s)",
+                                    measurement["idempotency_key"][:8],
+                                )
+
+                except socket.timeout:
+                    continue
+                except ConnectionResetError:
+                    log.info("Instrument connection reset")
+                    break
+
+            client.close()
+
+        except socket.timeout:
+            continue
+        except OSError:
+            if _shutdown.is_set():
+                break
+            raise
+
+    server.close()
+    log.info("TCP listener stopped")
+
+
+def listen_serial(
+    device: str,
+    baud: int,
+    instrument_id: int,
+    sample_id: int,
+    conn: sqlite3.Connection,
+    api_url: str,
+    db_path: str = "",
+) -> None:
+    """Listen for instrument data on RS232/USB serial port (production)."""
+    try:
+        import serial
+    except ImportError:
+        log.error("pyserial required for serial mode: pip install pyserial")
+        sys.exit(1)
+
+    log.info("=" * 60)
+    log.info("BioNexus Box Collector — Serial mode")
+    log.info("Device: %s @ %d baud", device, baud)
+    log.info("API target: %s", api_url)
+    log.info("Offline queue: %s", db_path)
+    log.info("=" * 60)
+
+    ser = serial.Serial(device, baud, timeout=1.0)
+    log.info("Serial port open: %s", device)
+
+    while not _shutdown.is_set():
+        try:
+            raw = ser.readline()
+            if not raw:
+                continue
+
+            line = raw.decode("utf-8", errors="replace").strip()
+            if not line:
+                continue
+
+            measurement = parse_line(line, instrument_id, sample_id)
+            if measurement:
+                queue_measurement(conn, measurement)
+                if not push_to_cloud(api_url, measurement):
+                    log.info(
+                        "  -> Buffered offline (%s)",
+                        measurement["idempotency_key"][:8],
+                    )
+
+        except Exception as e:
+            log.error("Serial read error: %s", e)
+            time.sleep(1)
+
+    ser.close()
+    log.info("Serial listener stopped")
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="BioNexus Box Collector — Lab instrument gateway",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Demo mode (TCP socket, no instrument needed)
+  python box_collector.py --mode tcp --port 9600
+
+  # Production (Mettler Toledo balance on USB)
+  python box_collector.py --mode serial --device /dev/ttyUSB0 --baud 9600
+
+  # Custom API endpoint
+  python box_collector.py --mode tcp --port 9600 --api-url http://192.168.1.50:8000
+        """,
+    )
+
+    parser.add_argument(
+        "--mode", choices=["tcp", "serial"], default="tcp",
+        help="Input mode: tcp (demo) or serial (production). Default: tcp",
+    )
+    parser.add_argument(
+        "--port", type=int, default=9600,
+        help="TCP port to listen on (tcp mode). Default: 9600",
+    )
+    parser.add_argument(
+        "--device", default="/dev/ttyUSB0",
+        help="Serial device path (serial mode). Default: /dev/ttyUSB0",
+    )
+    parser.add_argument(
+        "--baud", type=int, default=9600,
+        help="Serial baud rate. Default: 9600",
+    )
+    parser.add_argument(
+        "--api-url", default=API_BASE_URL,
+        help=f"BioNexus cloud API URL. Default: {API_BASE_URL}",
+    )
+    parser.add_argument(
+        "--instrument-id", type=int, default=1,
+        help="Instrument ID in BioNexus. Default: 1",
+    )
+    parser.add_argument(
+        "--sample-id", type=int, default=1,
+        help="Sample ID for measurements. Default: 1",
+    )
+    parser.add_argument(
+        "--db", default=DB_PATH,
+        help=f"SQLite queue path. Default: {DB_PATH}",
+    )
+
+    args = parser.parse_args()
+
+    db_path = args.db
+
+    # Initialize SQLite offline queue
+    conn = init_db(db_path)
+
+    # Start background sync thread
+    sync_thread = threading.Thread(
+        target=sync_loop,
+        args=(conn, args.api_url),
+        daemon=True,
+    )
+    sync_thread.start()
+
+    # Start listener
+    try:
+        if args.mode == "tcp":
+            listen_tcp(
+                args.port, args.instrument_id, args.sample_id,
+                conn, args.api_url, db_path,
+            )
+        else:
+            listen_serial(
+                args.device, args.baud, args.instrument_id, args.sample_id,
+                conn, args.api_url, db_path,
+            )
+    finally:
+        _shutdown.set()
+        sync_thread.join(timeout=5)
+        conn.close()
+        log.info("BioNexus Box Collector shut down cleanly")
+
+
+if __name__ == "__main__":
+    main()

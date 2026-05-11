@@ -68,7 +68,11 @@ class EndToEndCaptureTest(TestCase):
             units="g",
             required_metadata_fields=["operator", "lot_number", "method"],
             thresholds={
-                "weight": {"warn": 0.5, "block": 1.0, "unit": "%"},
+                # Threshold target is the deviation %, not the raw weight.
+                # Raw weights from a balance (12 g, 42 g, ...) would always
+                # exceed a 1.0 "block" rule and prevent the E2E flow once
+                # threshold enforcement is wired (LBN-CONF-002).
+                "weight_deviation": {"warn": 0.5, "block": 1.0, "unit": "%"},
             },
         )
         self.sample = Sample.objects.create(

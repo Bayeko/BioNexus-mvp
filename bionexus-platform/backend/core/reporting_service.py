@@ -62,9 +62,13 @@ class CertifiedReportService:
         if result["total_records"] == 0:
             return result
 
-        previous_signature = None
+        # Track previous signature per entity_type (matching AuditTrail.record chaining)
+        previous_signatures = {}
         for audit in tenant_audits:
             try:
+                entity_type = audit.entity_type
+                previous_signature = previous_signatures.get(entity_type)
+
                 # Verify chain linkage
                 if audit.previous_signature != previous_signature:
                     result["corrupted_records"].append({
@@ -81,9 +85,8 @@ class CertifiedReportService:
                     entity_type=audit.entity_type,
                     entity_id=audit.entity_id,
                     operation=audit.operation,
-                    timestamp=audit.timestamp,
+                    timestamp=audit.timestamp.isoformat(),
                     changes=audit.changes,
-                    user_id=audit.user_id,
                 )
 
                 if audit.signature != expected_signature:
@@ -95,7 +98,7 @@ class CertifiedReportService:
                 else:
                     result["verified_records"] += 1
 
-                previous_signature = audit.signature
+                previous_signatures[audit.entity_type] = audit.signature
 
             except Exception as e:
                 result["corrupted_records"].append({
@@ -273,7 +276,7 @@ class CertifiedReportService:
             "steps": [
                 {
                     "step_number": s.protocol_step_number,
-                    "sample": s.sample.name if s.sample else "Unknown",
+                    "sample": s.sample.sample_id if s.sample else "Unknown",
                     "parsed_data_id": s.parsed_data_id,
                     "is_valid": s.is_valid,
                     "notes": s.validation_notes,
@@ -283,9 +286,9 @@ class CertifiedReportService:
             "samples": [
                 {
                     "id": s.id,
-                    "name": s.name,
-                    "type": s.sample_type,
-                    "location": s.location,
+                    "sample_id": s.sample_id,
+                    "batch_number": s.batch_number,
+                    "status": s.status,
                 }
                 for s in samples
             ],

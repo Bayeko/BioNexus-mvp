@@ -3,41 +3,55 @@ from django.utils import timezone
 
 
 class Sample(models.Model):
-    """Model representing a biological sample.
+    """A tracked sample processed by a laboratory instrument.
 
-    Soft delete fields (is_deleted, deleted_at) ensure that data is never
-    permanently removed -- deletion is just a logical flag. This preserves
-    the audit trail for compliance purposes.
+    Tracks sample identity, which instrument processed it, batch info,
+    and processing status. Soft-delete preserves data for audit compliance.
     """
 
-    name = models.CharField(max_length=255)
-    sample_type = models.CharField(max_length=100)
-    received_at = models.DateTimeField()
-    location = models.CharField(max_length=255)
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("in_progress", "In Progress"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+    ]
 
-    # -- Soft Delete (for audit compliance) ------------------------------------
-    is_deleted = models.BooleanField(
-        default=False,
-        db_index=True,
-        help_text="Logical deletion marker (data is never physically removed)",
+    sample_id = models.CharField(
+        max_length=100, unique=True, help_text="Business identifier (e.g., SMP-2024-001)"
     )
-    deleted_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Timestamp when logically deleted (null if not deleted)",
+    instrument = models.ForeignKey(
+        "instruments.Instrument",
+        on_delete=models.PROTECT,
+        related_name="samples",
+        help_text="Instrument that processes this sample",
     )
+    batch_number = models.CharField(max_length=100, help_text="Batch or lot number")
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default="pending"
+    )
+    created_by = models.CharField(
+        max_length=255, help_text="Username or identifier of the creator"
+    )
+
+    # Soft delete
+    is_deleted = models.BooleanField(default=False, db_index=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         app_label = "samples"
         indexes = [
             models.Index(fields=["is_deleted", "id"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["batch_number"]),
         ]
 
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.name
+    def __str__(self) -> str:
+        return self.sample_id
 
     def soft_delete(self) -> None:
-        """Logically delete the sample (data preserved in DB for audit)."""
         self.is_deleted = True
         self.deleted_at = timezone.now()
         self.save(update_fields=["is_deleted", "deleted_at"])

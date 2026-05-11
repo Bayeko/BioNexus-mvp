@@ -1,3 +1,17 @@
 django==5.2.5
 djangorestframework==3.16.1
+django-filter==25.1
+drf-spectacular==0.29.0
+requests>=2.31.0
+pyotp==2.9.0
+qrcode[pil]==8.0
+pydantic>=2.0.0
+PyJWT>=2.8.0
+reportlab>=4.0.0
 pytest==8.4.1
+pytest-django==4.11.1
+
+# Error tracking and performance monitoring. Optional at runtime:
+# the SDK only initializes when SENTRY_DSN is set in the environment,
+# so dev and CI runs without a DSN behave identically to before.
+sentry-sdk[django]>=2.0.0,<3.0.0

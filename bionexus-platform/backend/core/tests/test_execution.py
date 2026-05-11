@@ -16,6 +16,7 @@ from core.models import AuditLog, ExecutionLog, ExecutionStep, Equipment
 from core.execution_service import ProtocolExecutionService
 from core.tests.fixtures import create_test_tenant, create_test_user
 from modules.samples.models import Sample
+from modules.instruments.models import Instrument
 from modules.protocols.models import Protocol
 
 
@@ -31,11 +32,18 @@ class ExecutionStartTest(TestCase):
             title="DNA Extraction",
             description="Standard DNA extraction protocol",
         )
+        self.instrument = Instrument.objects.create(
+            name="Test Instrument",
+            instrument_type="spectrophotometer",
+            serial_number="SN-EXEC-START-001",
+            connection_type="USB",
+            status="online",
+        )
         self.sample = Sample.objects.create(
-            name="Sample A",
-            sample_type="blood",
-            received_at=timezone.now(),
-            location="Freezer 1",
+            sample_id="SMP-TEST-001",
+            instrument=self.instrument,
+            batch_number="BATCH-001",
+            created_by="test_user",
         )
 
     def test_start_execution(self):
@@ -79,11 +87,18 @@ class ExecutionStepTest(TestCase):
             title="Test Protocol",
             description="",
         )
+        self.instrument = Instrument.objects.create(
+            name="Test Instrument",
+            instrument_type="spectrophotometer",
+            serial_number="SN-EXEC-STEP-001",
+            connection_type="USB",
+            status="online",
+        )
         self.sample = Sample.objects.create(
-            name="Sample B",
-            sample_type="plasma",
-            received_at=timezone.now(),
-            location="Freezer 2",
+            sample_id="SMP-TEST-002",
+            instrument=self.instrument,
+            batch_number="BATCH-002",
+            created_by="test_user",
         )
 
         # Create equipment
@@ -141,11 +156,18 @@ class ResultLinkageTest(TestCase):
 
         # Setup execution
         self.protocol = Protocol.objects.create(title="Test")
+        self.instrument = Instrument.objects.create(
+            name="Test Instrument",
+            instrument_type="spectrophotometer",
+            serial_number="SN-RESULT-LINK-001",
+            connection_type="USB",
+            status="online",
+        )
         self.sample = Sample.objects.create(
-            name="Sample C",
-            sample_type="serum",
-            received_at=timezone.now(),
-            location="Freezer 3",
+            sample_id="SMP-TEST-003",
+            instrument=self.instrument,
+            batch_number="BATCH-003",
+            created_by="test_user",
         )
         self.execution = ProtocolExecutionService.start_execution(
             tenant=self.tenant,
@@ -252,11 +274,18 @@ class OrphanedDataDetectionTest(TestCase):
     def test_linking_removes_from_orphans(self):
         """Linking data to step removes from orphans list."""
         protocol = Protocol.objects.create(title="Link Test")
+        instrument = Instrument.objects.create(
+            name="Test Instrument",
+            instrument_type="spectrophotometer",
+            serial_number="SN-ORPHAN-001",
+            connection_type="USB",
+            status="online",
+        )
         sample = Sample.objects.create(
-            name="Sample D",
-            sample_type="dna",
-            received_at=timezone.now(),
-            location="Freezer 4",
+            sample_id="SMP-TEST-004",
+            instrument=instrument,
+            batch_number="BATCH-004",
+            created_by="test_user",
         )
 
         execution = ProtocolExecutionService.start_execution(
@@ -297,11 +326,18 @@ class TechnicianValidationTest(TestCase):
         )
 
         protocol = Protocol.objects.create(title="Validation Test")
+        instrument = Instrument.objects.create(
+            name="Test Instrument",
+            instrument_type="spectrophotometer",
+            serial_number="SN-TECH-VAL-001",
+            connection_type="USB",
+            status="online",
+        )
         sample = Sample.objects.create(
-            name="Sample E",
-            sample_type="rna",
-            received_at=timezone.now(),
-            location="Freezer 5",
+            sample_id="SMP-TEST-005",
+            instrument=instrument,
+            batch_number="BATCH-005",
+            created_by="test_user",
         )
 
         execution = ProtocolExecutionService.start_execution(

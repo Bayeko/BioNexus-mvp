@@ -1,0 +1,15 @@
+Instrument: Agilent 1260 Infinity II HPLC
+Serial_Number: DE64902145
+Location: Analytical Chemistry Lab - Room 203
+Method: USP <621> Purity Assay
+Analyst: Dr. M. Laurent
+Date: 2026-03-12
+
+Sample_ID,Sample_Name,Sample_Type,Retention_Time_min,Peak_Area_mAU,Peak_Height,Purity_Percent,Operator,Quantity,Quantity_Unit
+HPLC-2026-001,Ibuprofen Raw Material Lot A-441,other,3.42,18542.3,4521.1,99.72,Dr. M. Laurent,15.0,mg
+HPLC-2026-002,Ibuprofen Raw Material Lot A-442,other,3.44,18389.7,4487.3,99.65,Dr. M. Laurent,15.0,mg
+HPLC-2026-003,Ibuprofen Tablet Batch BT-2026-088,other,3.41,17856.1,4390.2,98.91,Dr. M. Laurent,20.0,mg
+HPLC-2026-004,Reference Standard USP Ibuprofen,other,3.43,18600.0,4530.0,100.00,Dr. M. Laurent,10.0,mg
+HPLC-2026-005,Ibuprofen Stability T3M 40C/75RH,other,3.45,17234.5,4201.8,97.12,Dr. M. Laurent,15.0,mg
+HPLC-2026-006,Placebo Blank,other,0.00,12.4,3.1,0.00,Dr. M. Laurent,20.0,mg
+HPLC-2026-007,System Suitability Check,other,3.43,18590.2,4528.5,99.95,Dr. M. Laurent,10.0,mg

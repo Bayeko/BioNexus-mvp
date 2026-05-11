@@ -11,3 +11,26 @@ __pycache__/
 node_modules/
 dist/
 
+
+# SQLite
+*.sqlite3-shm
+*.sqlite3-wal
+db.sqlite3
+
+# Test data files
+*.xlsx
+*.xls
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code local settings
+.claude/
+
+# Binary downloads
+*.zip

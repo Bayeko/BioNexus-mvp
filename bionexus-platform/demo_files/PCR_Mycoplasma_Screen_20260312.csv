@@ -1,0 +1,16 @@
+Instrument: Bio-Rad CFX96 Real-Time PCR
+Serial_Number: BR-789456123
+Location: Molecular Biology Lab - Room 301
+Method: MycoSEQ Mycoplasma Detection Assay
+Analyst: Dr. A. Chen
+Date: 2026-03-12
+
+Sample_ID,Sample_Name,Type,Target_Gene,Ct_Value,Melting_Temp,Result,Operator,Storage_Temp,Quantity,Quantity_Unit
+PCR-2026-101,Cell Culture Supernatant Lot CC-2026-15,other,16S rRNA,35.2,82.5,Negative,Dr. A. Chen,-80,0.2,mL
+PCR-2026-102,Cell Culture Supernatant Lot CC-2026-16,other,16S rRNA,34.8,82.4,Negative,Dr. A. Chen,-80,0.2,mL
+PCR-2026-103,Cell Culture Supernatant Lot CC-2026-17,other,16S rRNA,18.4,82.6,POSITIVE,Dr. A. Chen,-80,0.2,mL
+PCR-2026-104,Positive Control (M. orale DNA),dna,16S rRNA,15.2,82.5,Positive,Dr. A. Chen,-20,0.1,mL
+PCR-2026-105,Negative Control (NTC),other,16S rRNA,0.0,0.0,Negative,Dr. A. Chen,4,0.1,mL
+PCR-2026-106,Internal Positive Control,dna,IPC,22.1,76.3,Valid,Dr. A. Chen,-20,0.1,mL
+PCR-2026-107,mAb Harvest Fluid Batch HF-440,other,16S rRNA,36.1,82.4,Negative,Dr. A. Chen,-80,0.2,mL
+PCR-2026-108,mAb Harvest Fluid Batch HF-441,other,16S rRNA,35.9,82.5,Negative,Dr. A. Chen,-80,0.2,mL

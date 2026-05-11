@@ -23,12 +23,10 @@ class AuditTrail:
         changes: dict[str, Any],
         snapshot_before: dict[str, Any],
         snapshot_after: dict[str, Any],
-        user_id: int,
-        user_email: str,
+        user_id: int | None = None,
+        user_email: str = "system@bionexus.local",
     ) -> AuditLog:
         """Record a mutation in the audit trail with signature.
-
-        User identification is MANDATORY (21 CFR Part 11 requirement).
 
         Args:
             entity_type: Name of the model (e.g., 'Sample', 'Protocol')
@@ -37,24 +35,12 @@ class AuditTrail:
             changes: Dict of field changes
             snapshot_before: Complete entity state before mutation
             snapshot_after: Complete entity state after mutation
-            user_id: ID of the AUTHENTICATED user (mandatory, not optional)
-            user_email: Email of the user (mandatory for audit trail)
+            user_id: ID of the user (0 or None for system-level operations)
+            user_email: Email of the user (defaults to system address)
 
         Returns:
             AuditLog: The immutable audit record just created
-
-        Raises:
-            ValueError: If user_id or user_email is missing
         """
-        if not user_id:
-            raise ValueError(
-                "user_id is mandatory for audit trail (21 CFR Part 11). "
-                "All operations must be performed by authenticated users."
-            )
-        if not user_email:
-            raise ValueError(
-                "user_email is mandatory for audit trail (21 CFR Part 11)."
-            )
         with transaction.atomic():
             from django.utils import timezone
 

@@ -16,8 +16,10 @@ import hashlib
 import json
 from datetime import datetime
 
+import pyotp
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class AuditLog(models.Model):
@@ -147,7 +149,7 @@ class AuditLog(models.Model):
             "changes": changes,
             "timestamp": timestamp,
         }
-        canonical = json.dumps(data, sort_keys=True, separators=(",", ":"))
+        canonical = json.dumps(data, sort_keys=True, separators=(",", ":"), default=str)
         return hashlib.sha256(canonical.encode()).hexdigest()
 
     def clean(self):
@@ -361,6 +363,23 @@ class User(AbstractUser):
         help_text="User agent of last login (for audit)",
     )
 
+    # TOTP two-factor authentication (21 CFR Part 11)
+    totp_secret = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        help_text="Base32-encoded TOTP secret key",
+    )
+    totp_enabled = models.BooleanField(
+        default=False,
+        help_text="Whether TOTP 2FA is active for this user",
+    )
+    totp_verified_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When TOTP was first verified and activated",
+    )
+
     class Meta:
         app_label = "core"
         unique_together = ("tenant", "username")
@@ -386,6 +405,29 @@ class User(AbstractUser):
                 "permission__codename", flat=True
             )
         )
+
+    def generate_totp_secret(self) -> str:
+        """Generate and store a new TOTP secret."""
+        self.totp_secret = pyotp.random_base32()
+        self.totp_enabled = False
+        self.totp_verified_at = None
+        self.save(update_fields=["totp_secret", "totp_enabled", "totp_verified_at"])
+        return self.totp_secret
+
+    def get_totp_uri(self) -> str:
+        """Return otpauth:// URI for QR code generation."""
+        totp = pyotp.TOTP(self.totp_secret)
+        return totp.provisioning_uri(
+            name=self.email or self.username,
+            issuer_name="BioNexus",
+        )
+
+    def verify_totp(self, code: str) -> bool:
+        """Verify a TOTP code against the stored secret."""
+        if not self.totp_secret:
+            return False
+        totp = pyotp.TOTP(self.totp_secret)
+        return totp.verify(code, valid_window=1)
 
 
 # --- Parsing & Data Validation (ALCOA+ Compliance) ---------------------------
@@ -577,6 +619,22 @@ class ParsedData(models.Model):
         self.save(update_fields=[
             "state", "validated_by", "validated_at",
             "confirmed_json", "validation_notes"
+        ])
+
+    def reject(self, user: User, reason: str = ""):
+        """Mark parsing as rejected by a human.
+
+        Args:
+            user: User rejecting the extraction
+            reason: Why the extraction was rejected
+        """
+        self.state = self.REJECTED
+        self.validated_by = user
+        self.validated_at = timezone.now()
+        self.validation_notes = reason
+        self.save(update_fields=[
+            "state", "validated_by", "validated_at",
+            "validation_notes"
         ])
 
 
@@ -847,6 +905,20 @@ class CertifiedReport(models.Model):
         (REVOKED, "Revoked (chain corrupted)"),
     ]
 
+    # SIGNATURE MEANINGS (21 CFR Part 11 §11.50)
+    REVIEW = "review"
+    APPROVAL = "approval"
+    RESPONSIBILITY = "responsibility"
+    AUTHORSHIP = "authorship"
+    VERIFICATION = "verification"
+    SIGNATURE_MEANING_CHOICES = [
+        (REVIEW, "Review"),
+        (APPROVAL, "Approval"),
+        (RESPONSIBILITY, "Responsibility"),
+        (AUTHORSHIP, "Authorship"),
+        (VERIFICATION, "Verification"),
+    ]
+
     # DATA
     tenant = models.ForeignKey(
         "Tenant",
@@ -875,12 +947,20 @@ class CertifiedReport(models.Model):
         blank=True,
         help_text="When report was certified",
     )
+    signature_meaning = models.CharField(
+        max_length=20,
+        choices=SIGNATURE_MEANING_CHOICES,
+        blank=True,
+        default="",
+        help_text="Meaning of the electronic signature (21 CFR Part 11 §11.50)",
+    )
 
     # INTEGRITY
     report_hash = models.CharField(
         max_length=64,
         unique=True,
         db_index=True,
+        default="",
         help_text="SHA-256 hash of PDF content (proof of originality)",
     )
     chain_integrity_verified = models.BooleanField(
@@ -895,9 +975,11 @@ class CertifiedReport(models.Model):
     # STORAGE
     pdf_filename = models.CharField(
         max_length=255,
+        default="",
         help_text="Filename of certified PDF report",
     )
     pdf_size = models.BigIntegerField(
+        default=0,
         help_text="Size of PDF in bytes",
     )
 

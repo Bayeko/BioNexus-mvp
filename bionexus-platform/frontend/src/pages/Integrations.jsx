@@ -101,6 +101,33 @@ const INTEGRATIONS = [
     features: ['REST + SOAP support', 'Sample lifecycle sync', 'Result auto-import', 'Configurable field mapping'],
   },
   {
+    id: 'veeva',
+    name: 'Veeva Vault QMS',
+    category: 'QMS',
+    description: 'Push Labionexus quality events and measurement context into Veeva Vault QMS for centralized batch release workflows.',
+    status: 'roadmap',
+    roadmapLabel: 'Q3 2026',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M21 8V7l-3-2-3 2v1l-2-1-3 2v1L8 9l-3 2v1L3 12v9h18v-9l-2-1V8z" />
+        <path d="M9 22V12h6v10" />
+      </svg>
+    ),
+    mapping: [
+      { bionexus: 'Measurement', empower: 'quality_event__v', direction: 'push' },
+      { bionexus: 'AuditLog signature', empower: 'audit_attachment__v', direction: 'push' },
+      { bionexus: 'CertifiedReport PDF', empower: 'document__v', direction: 'push' },
+      { bionexus: 'Operator ID', empower: 'reported_by__v', direction: 'push' },
+      { bionexus: 'Lot number', empower: 'lot__v', direction: 'push' },
+    ],
+    features: [
+      'OAuth2 against Veeva Vault sandbox + production',
+      'VQL-backed object lookups',
+      'Signed payloads (HMAC-SHA256) with retry + dead-letter',
+      'Field mapping respects 21 CFR Part 11 §11.10 attribution',
+    ],
+  },
+  {
     id: 'benchling',
     name: 'Benchling ELN',
     category: 'ELN',
@@ -126,6 +153,11 @@ const STATUS_MAP = {
 
 function IntegrationCard({ integration, onSelect, isSelected }) {
   const st = STATUS_MAP[integration.status] || STATUS_MAP.roadmap;
+  // Integrations with a roadmap window publish a more specific label
+  // (e.g. "Q3 2026") to differentiate "tracked roadmap" from "wishlist".
+  const badgeLabel = integration.roadmapLabel
+    ? `${st.label} · ${integration.roadmapLabel}`
+    : st.label;
 
   return (
     <div
@@ -138,7 +170,7 @@ function IntegrationCard({ integration, onSelect, isSelected }) {
           <h3 className="integ-card-name">{integration.name}</h3>
           <span className="integ-card-category">{integration.category}</span>
         </div>
-        <StatusBadge status={st.className} label={st.label} />
+        <StatusBadge status={st.className} label={badgeLabel} />
       </div>
       <p className="integ-card-desc">{integration.description}</p>
       <div className="integ-card-features">

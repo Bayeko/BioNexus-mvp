@@ -51,6 +51,16 @@ const NAV_SECTIONS = [
           </svg>
         ),
       },
+      {
+        to: '/capture',
+        label: 'Capture',
+        icon: (
+          <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 5v14M5 12h14" />
+            <circle cx="12" cy="12" r="9" />
+          </svg>
+        ),
+      },
     ],
   },
   {

@@ -58,6 +58,19 @@ export function fetchSample(id) {
   return request(`/api/samples/${id}/`);
 }
 
+// --- Instrument Config (capture form driver) ---
+
+/**
+ * Fetch the capture config for an instrument.
+ *
+ * Returns { parser_type, units, required_metadata_fields, thresholds, configured }.
+ * When the instrument has no config, `configured` is false and
+ * `required_metadata_fields` is an empty array so the form still works.
+ */
+export function fetchInstrumentConfig(instrumentId) {
+  return request(`/api/instruments/${instrumentId}/config/`);
+}
+
 // --- Measurements ---
 
 export function fetchMeasurements(filters = {}) {
@@ -66,6 +79,40 @@ export function fetchMeasurements(filters = {}) {
   if (filters.instrument) mapped.instrument = filters.instrument;
   if (filters.parameter) mapped.parameter = filters.parameter;
   return request(`/api/measurements/${buildQS(mapped)}`);
+}
+
+/**
+ * Create a measurement together with its operational context in one call.
+ *
+ * Payload shape:
+ *   {
+ *     sample, instrument, parameter, value, unit, measured_at,
+ *     context: { operator, lot_number, method, sample_id, notes }
+ *   }
+ *
+ * The server enforces InstrumentConfig.required_metadata_fields on the
+ * context block. 400 errors come back with { context: { field: "..." } }.
+ */
+export async function createMeasurement(payload) {
+  const res = await fetch('/api/measurements/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let detail = text;
+    try {
+      detail = JSON.parse(text);
+    } catch (_) {
+      /* not JSON, keep as text */
+    }
+    const err = new Error(`Create failed ${res.status}`);
+    err.status = res.status;
+    err.detail = detail;
+    throw err;
+  }
+  return res.json();
 }
 
 // --- Audit ---

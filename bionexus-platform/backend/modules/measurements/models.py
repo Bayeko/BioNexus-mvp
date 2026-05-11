@@ -5,6 +5,79 @@ import uuid
 from django.db import models
 
 
+class MeasurementContext(models.Model):
+    """Operational context captured at the time of a measurement.
+
+    Records WHO performed the measurement, WHAT method/lot was involved, and
+    any operator notes. This metadata layer is what differentiates BioNexus
+    from generic LIMS: structured context, not just raw data.
+
+    Per LBN-CONF-001, each InstrumentConfig can enforce which context fields
+    are required via ``required_metadata_fields``. Validation happens at the
+    serializer/service layer, not at the DB level, so partial contexts can
+    still be stored (e.g., instrument-only readings without an operator).
+    """
+
+    measurement = models.OneToOneField(
+        "measurements.Measurement",
+        on_delete=models.CASCADE,
+        related_name="context",
+        help_text="The measurement this context belongs to",
+    )
+    instrument = models.ForeignKey(
+        "instruments.Instrument",
+        on_delete=models.PROTECT,
+        related_name="measurement_contexts",
+        help_text="Instrument that produced this reading (denormalized for query performance)",
+    )
+    operator = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Pseudonymized operator identifier (never PII)",
+    )
+    lot_number = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Lot/batch number being tested",
+    )
+    method = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Analytical method reference (e.g., USP <621>, Ph. Eur. 2.2.25)",
+    )
+    sample_id = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="External sample identifier from the QC workflow",
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text="Free-text operator notes or observations",
+    )
+    timestamp = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this context record was created",
+    )
+
+    class Meta:
+        app_label = "measurements"
+        indexes = [
+            models.Index(fields=["instrument", "timestamp"]),
+            models.Index(fields=["lot_number"]),
+            models.Index(fields=["operator"]),
+        ]
+
+    def __str__(self) -> str:
+        parts = []
+        if self.operator:
+            parts.append(f"op={self.operator}")
+        if self.lot_number:
+            parts.append(f"lot={self.lot_number}")
+        if self.method:
+            parts.append(f"method={self.method}")
+        return f"Context({', '.join(parts) or 'empty'}) for Measurement#{self.measurement_id}"
+
+
 class Measurement(models.Model):
     """A single data point captured from a laboratory instrument.
 

@@ -22,6 +22,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from box_collector import (  # noqa: E402
+    AgilentChemStationParser,
     BaseParser,
     CaptureContext,
     GenericCSVParser,
@@ -199,6 +200,86 @@ class TestGenericCSVParser:
         result = GenericCSVParser.parse("pH,7.42,pH,extra,fields", ctx)
         assert result is not None
         assert result["parameter"] == "pH"
+
+
+# ---------------------------------------------------------------------------
+# AgilentChemStationParser
+# ---------------------------------------------------------------------------
+
+class TestAgilentChemStationParser:
+    """Tests for the HPLC peak report parser (D7 T22).
+
+    Format: ``<peak_num>,<retention_time>,<area>,<height>,<compound>,<unit>``
+    Each peak data row becomes one ParsedReading where ``parameter`` is
+    the compound name and ``value`` is the peak area.
+    """
+
+    PEAK_ROW = "1,2.345,12345.6,234.5,Caffeine,mAU*s"
+
+    def test_parse_basic_peak_row(self, ctx: CaptureContext) -> None:
+        result = AgilentChemStationParser.parse(self.PEAK_ROW, ctx)
+        assert result is not None
+        assert result["parameter"] == "Caffeine"
+        assert result["value"] == "12345.6"
+        assert result["unit"] == "mAU*s"
+        assert result["protocol_meta"]["protocol"] == "ChemStation"
+        assert result["protocol_meta"]["parser"] == "agilent_chemstation_v1"
+        assert result["protocol_meta"]["peak_number"] == "1"
+        # retention_time + height carried through as floats
+        assert result["protocol_meta"]["retention_time_min"] == 2.345
+        assert result["protocol_meta"]["height"] == 234.5
+
+    def test_can_parse_rejects_header_comments(self) -> None:
+        assert AgilentChemStationParser.can_parse(
+            "# Agilent ChemStation Peak Report"
+        ) is False
+
+    def test_can_parse_rejects_table_header(self) -> None:
+        assert AgilentChemStationParser.can_parse(
+            "Peak,RetTime,Area,Height,Name,Unit"
+        ) is False
+
+    def test_can_parse_rejects_wrong_field_count(self) -> None:
+        # 3 fields (a Generic CSV row) must not be claimed by Agilent
+        assert AgilentChemStationParser.can_parse("pH,7.42,pH") is False
+        # 5 fields also rejected
+        assert AgilentChemStationParser.can_parse("1,2.3,4.5,6.7,Caffeine") is False
+
+    def test_can_parse_rejects_non_numeric_retention(self) -> None:
+        assert AgilentChemStationParser.can_parse(
+            "1,not-a-number,12345.6,234.5,Caffeine,mAU*s"
+        ) is False
+
+    def test_empty_compound_name_falls_back(self, ctx: CaptureContext) -> None:
+        result = AgilentChemStationParser.parse(
+            "1,2.345,12345.6,234.5,,mAU*s", ctx
+        )
+        assert result is not None
+        assert result["parameter"] == "unknown_peak"
+
+    def test_hash_includes_metadata(self, ctx: CaptureContext) -> None:
+        """SHA-256 must change when context changes (LBN-CONF-001)."""
+        result1 = AgilentChemStationParser.parse(self.PEAK_ROW, ctx)
+        # Different operator -> different hash
+        other_ctx = CaptureContext(**{**ctx.to_dict(), "operator": "OP-OTHER"})
+        result2 = AgilentChemStationParser.parse(self.PEAK_ROW, other_ctx)
+        assert result1["data_hash"] != result2["data_hash"]
+
+    def test_dispatch_via_parse_line(self, ctx: CaptureContext) -> None:
+        """parse_line must route 6-field rows to AgilentChemStation, not GenericCSV."""
+        result = parse_line(self.PEAK_ROW, ctx)
+        assert result is not None
+        assert result["protocol_meta"]["parser"] == "agilent_chemstation_v1"
+
+    def test_raw_line_preserved(self, ctx: CaptureContext) -> None:
+        result = AgilentChemStationParser.parse(self.PEAK_ROW, ctx)
+        assert result is not None
+        assert result["raw"] == self.PEAK_ROW
+
+    def test_extract_returns_none_on_malformed(self) -> None:
+        """extract() should be defensive even past can_parse."""
+        assert AgilentChemStationParser.extract("garbage") is None
+        assert AgilentChemStationParser.extract("") is None
 
 
 # ---------------------------------------------------------------------------

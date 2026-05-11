@@ -71,6 +71,16 @@ class MeasurementSerializer(serializers.ModelSerializer):
     The composite form atomically creates both Measurement and
     MeasurementContext in a single transaction, enforcing
     InstrumentConfig.required_metadata_fields at the API boundary.
+
+    Threshold enforcement (LBN-CONF-002):
+      When the instrument has an InstrumentConfig with thresholds for the
+      measured parameter, the serializer evaluates the verdict at validate-
+      time:
+        - "log"   : silent, captured as normal
+        - "alert" : captured, response carries `threshold_verdict="alert"`
+                    so the UI can render a warning banner
+        - "block" : ValidationError 400, no measurement persisted
+                    (supervisor re-auth bypass is a future feature)
     """
 
     # Read-only nested representation for GET
@@ -79,6 +89,8 @@ class MeasurementSerializer(serializers.ModelSerializer):
     context_input = NestedContextInputSerializer(
         write_only=True, required=False, source="_context_input"
     )
+    # Read-only verdict surfaced on create response (computed at validate-time)
+    threshold_verdict = serializers.SerializerMethodField()
 
     class Meta:
         model = Measurement
@@ -95,8 +107,19 @@ class MeasurementSerializer(serializers.ModelSerializer):
             "created_at",
             "context",
             "context_input",
+            "threshold_verdict",
         ]
         read_only_fields = ["id", "data_hash", "created_at"]
+
+    def get_threshold_verdict(self, obj):
+        """Surface the threshold verdict attached at create-time.
+
+        Returns None on reads (we only compute the verdict during writes,
+        because the threshold may have been re-configured since the
+        measurement was captured ; the stored audit trail is the source
+        of truth for retrospective verdicts).
+        """
+        return getattr(obj, "_threshold_verdict", None)
 
     def to_internal_value(self, data):
         """Accept both ``context`` and ``context_input`` as the write key.
@@ -115,17 +138,24 @@ class MeasurementSerializer(serializers.ModelSerializer):
         return super().to_internal_value(data)
 
     def validate(self, attrs: dict) -> dict:
-        """Enforce InstrumentConfig.required_metadata_fields at composite create.
+        """Run the two API-boundary checks: required metadata + thresholds.
 
-        If the instrument has a config with required fields, the context
-        payload must cover them. Runs even if ``context_input`` is absent
-        (treats absent context as "all fields missing").
+        Required metadata (LBN-CONF-001): the instrument's InstrumentConfig
+        can mark some MeasurementContext fields as mandatory. Missing
+        fields produce a 400 with ``{"context": {field: msg}}``.
+
+        Threshold enforcement (LBN-CONF-002): the same config can carry
+        per-parameter rules. ``block`` verdict raises 400 immediately
+        (no measurement persisted). ``alert``/``log`` verdicts are stashed
+        on attrs so ``create()`` can carry them onto the response.
         """
         instrument = attrs.get("instrument")
         context_data = attrs.get("_context_input")
 
         if instrument and hasattr(instrument, "config"):
             config = instrument.config
+
+            # 1. Required metadata fields
             to_check = context_data or {}
             missing = config.validate_context(to_check)
             if missing:
@@ -135,12 +165,41 @@ class MeasurementSerializer(serializers.ModelSerializer):
                         for field in missing
                     }
                 })
+
+            # 2. Threshold rules
+            parameter = attrs.get("parameter")
+            value = attrs.get("value")
+            if parameter and value is not None:
+                try:
+                    numeric_value = float(value)
+                except (TypeError, ValueError):
+                    # Non-numeric value: skip threshold eval (e.g., textual
+                    # qualitative results), keep the rest of validation intact.
+                    numeric_value = None
+
+                if numeric_value is not None:
+                    verdict = config.evaluate_threshold(parameter, numeric_value)
+                    if verdict == "block":
+                        raise serializers.ValidationError({
+                            "value": (
+                                f"Value {numeric_value} violates the block threshold "
+                                f"configured for parameter '{parameter}' on this "
+                                f"instrument. Supervisor override is required to "
+                                f"persist out-of-spec readings."
+                            ),
+                            "threshold_verdict": "block",
+                        })
+                    # alert and log verdicts ride along to the response
+                    attrs["_threshold_verdict"] = verdict
+
         return attrs
 
     @transaction.atomic
     def create(self, validated_data: dict) -> Measurement:
         """Atomically create Measurement + optional MeasurementContext."""
         context_data = validated_data.pop("_context_input", None)
+        threshold_verdict = validated_data.pop("_threshold_verdict", None)
+
         measurement = super().create(validated_data)
 
         if context_data:
@@ -155,5 +214,10 @@ class MeasurementSerializer(serializers.ModelSerializer):
             )
             # Refresh so the read-only `context` field is populated on the response
             measurement.refresh_from_db()
+
+        # Stash on the instance so get_threshold_verdict() surfaces it
+        # on this exact response, without persisting in DB.
+        if threshold_verdict is not None:
+            measurement._threshold_verdict = threshold_verdict
 
         return measurement

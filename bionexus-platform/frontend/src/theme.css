@@ -2485,3 +2485,43 @@ a:hover { text-decoration: underline; }
 @media (max-width: 768px) {
   .capture-form .form-row { grid-template-columns: 1fr; }
 }
+
+/* ========== Threshold Verdict Banners ========== */
+.threshold-banner {
+  padding: 12px 16px;
+  margin: 16px 0;
+  border-radius: 8px;
+  border: 1px solid;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.threshold-banner strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.threshold-banner p {
+  margin: 0;
+}
+
+.threshold-banner--alert {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+}
+
+.threshold-banner--alert strong {
+  color: #fcd34d;
+}
+
+.threshold-banner--block {
+  background: rgba(239, 68, 68, 0.10);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.threshold-banner--block strong {
+  color: #fecaca;
+}

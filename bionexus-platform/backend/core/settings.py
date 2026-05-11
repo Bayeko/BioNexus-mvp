@@ -149,6 +149,43 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
+# --- Observability (Sentry) -------------------------------------------------
+#
+# Initialized only when SENTRY_DSN is present so dev / CI / unit tests stay
+# free of network calls and side effects. Severity tags (p0..p3) drive the
+# alert rules configured in the Sentry web UI per the incident response
+# runbook. The release tag is set from CI (commit SHA) so post-mortems can
+# correlate errors with deploys.
+
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+SENTRY_ENVIRONMENT = os.environ.get("SENTRY_ENVIRONMENT", "dev")
+SENTRY_RELEASE = os.environ.get("SENTRY_RELEASE", "")
+# Traces sampling: keep low in prod to stay within free-plan quota.
+# Override via env when investigating a latency regression.
+SENTRY_TRACES_SAMPLE_RATE = float(
+    os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.0")
+)
+
+if SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.django import DjangoIntegration
+
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            integrations=[DjangoIntegration()],
+            environment=SENTRY_ENVIRONMENT,
+            release=SENTRY_RELEASE or None,
+            traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
+            send_default_pii=False,  # No PII policy: never auto-attach user info
+        )
+        # Default severity tag for un-tagged errors. Handlers that know
+        # their severity (capture_message(..., level=...)) override this.
+        sentry_sdk.set_tag("severity", "p2")
+    except ImportError:  # pragma: no cover - SDK is optional at runtime
+        pass
+
+
 # --- Persistence / WAL Sync Engine ------------------------------------------
 
 PERSISTENCE = {

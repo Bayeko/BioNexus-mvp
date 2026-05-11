@@ -10,3 +10,8 @@ PyJWT>=2.8.0
 reportlab>=4.0.0
 pytest==8.4.1
 pytest-django==4.11.1
+
+# Error tracking and performance monitoring. Optional at runtime:
+# the SDK only initializes when SENTRY_DSN is set in the environment,
+# so dev and CI runs without a DSN behave identically to before.
+sentry-sdk[django]>=2.0.0,<3.0.0

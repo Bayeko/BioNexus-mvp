@@ -122,6 +122,40 @@ def karl_fischer_frames(count: int) -> list[str]:
             f"KF,water_content,{water_content:.3f},%,"
             f"{sample},{volume_ml:.2f},{drift:.1f}"
         )
+def agilent_chemstation_frames(count: int) -> list[str]:
+    """Generate Agilent ChemStation peak report rows.
+
+    Realistic shape : a short header block followed by ``count`` data
+    rows, one per detected peak. Header lines are rejected by the
+    parser so they are safe to send alongside the data rows.
+
+    Format per data row :
+        <peak_number>,<retention_time_min>,<area>,<height>,<compound>,<unit>
+    """
+    frames = [
+        "# Agilent ChemStation Peak Report",
+        "# Method: USP-007.M",
+        "# Instrument: HPLC-Agilent-1260",
+        "Peak,RetTime,Area,Height,Name,Unit",
+    ]
+
+    compounds = [
+        ("Caffeine", 2.345),
+        ("Aspirin", 3.876),
+        ("Ibuprofen", 5.420),
+        ("Paracetamol", 4.105),
+    ]
+
+    for i in range(count):
+        compound, base_rt = compounds[i % len(compounds)]
+        peak_num = i + 1
+        retention = base_rt + random.uniform(-0.05, 0.05)
+        area = random.uniform(5000, 30000)
+        height = area / random.uniform(20, 60)
+        frames.append(
+            f"{peak_num},{retention:.3f},{area:.1f},{height:.1f},{compound},mAU*s"
+        )
+
     return frames
 
 
@@ -131,6 +165,7 @@ PROTOCOLS = {
     "csv": ("Generic CSV (pH Meter)", csv_ph_frames),
     "spectro": ("CSV Spectrophotometer", csv_spectro_frames),
     "kf": ("Karl Fischer Titrator", karl_fischer_frames),
+    "agilent": ("Agilent ChemStation (HPLC)", agilent_chemstation_frames),
 }
 
 

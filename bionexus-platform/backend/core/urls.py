@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 
 from core.api_views import CertificationSigningViewSet, TOTPViewSet
 from core.audit_views import AuditLogViewSet
+from core.health_views import healthz
 from core.export_views import (
     export_formats,
     export_measurements_csv,
@@ -32,6 +33,11 @@ router.register(r"totp", TOTPViewSet, basename="totp")
 certification_sign = CertificationSigningViewSet.as_view({"post": "create"})
 
 urlpatterns = [
+    # Liveness probe (UptimeRobot, GCP Cloud Monitoring, Sentry cron).
+    # Kept at the root path so monitors don't need API prefix awareness.
+    path("healthz", healthz, name="healthz"),
+    path("healthz/", healthz),  # accept trailing slash for compatibility
+
     path("api/", include(router.urls)),
     path("api/reports/<int:pk>/sign/", certification_sign, name="report-sign"),
     path("api/persistence/", include("modules.persistence.urls")),

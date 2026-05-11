@@ -23,6 +23,25 @@ import {
   fetchSamples,
 } from '../api';
 
+// Threshold UI styling per verdict (mirror of theme.css banner classes).
+const VERDICT_BANNER = {
+  log: null, // silent
+  alert: {
+    className: 'threshold-banner threshold-banner--alert',
+    headline: 'Threshold alert',
+    body:
+      'This value is outside the configured specification range. ' +
+      'The reading will still be captured and flagged in the audit trail.',
+  },
+  block: {
+    className: 'threshold-banner threshold-banner--block',
+    headline: 'Threshold block',
+    body:
+      'This value violates a blocking threshold. The reading cannot be ' +
+      'submitted without supervisor authorization.',
+  },
+};
+
 // Ordered catalogue of context fields the form knows how to render.
 // Required flag is derived dynamically from the instrument's config.
 const CONTEXT_FIELDS = [
@@ -63,6 +82,46 @@ function resolveCurrentOperator() {
     return window.BIONEXUS_USER.email;
   }
   return '';
+}
+
+/**
+ * Pure-JS mirror of InstrumentConfig.evaluate_threshold (Python).
+ *
+ * Returns 'log' | 'alert' | 'block'. Falls back to 'log' for any case
+ * that the backend treats as "no opinion" (missing config, non-numeric
+ * value, parameter not in the thresholds dict, malformed rule).
+ *
+ * Kept side-effect-free so we can call it on every keystroke during
+ * the capture form to give instant operator feedback. The server is
+ * the canonical source of truth and re-evaluates on submit.
+ */
+export function evaluateThreshold(thresholds, parameter, rawValue) {
+  if (!thresholds || typeof thresholds !== 'object') return 'log';
+  const rule = thresholds[parameter];
+  if (!rule || typeof rule !== 'object') return 'log';
+
+  const value = Number(rawValue);
+  if (!Number.isFinite(value)) return 'log';
+
+  // Range-based threshold (min/max)
+  if (typeof rule.min === 'number' && value < rule.min) {
+    return rule.action || 'alert';
+  }
+  if (typeof rule.max === 'number' && value > rule.max) {
+    return rule.action || 'alert';
+  }
+
+  // Deviation-based threshold (warn/block); compare against absolute value
+  // because deviations are signed but the rule expresses magnitude.
+  const magnitude = Math.abs(value);
+  if (typeof rule.block === 'number' && magnitude >= rule.block) {
+    return 'block';
+  }
+  if (typeof rule.warn === 'number' && magnitude >= rule.warn) {
+    return 'alert';
+  }
+
+  return 'log';
 }
 
 export default function CaptureMeasurement() {
@@ -120,6 +179,18 @@ export default function CaptureMeasurement() {
     return new Set(config.required_metadata_fields || []);
   }, [config]);
 
+  // Live threshold verdict — recomputed on every relevant keystroke.
+  // 'log' means "all clear", 'alert' shows a banner, 'block' shows banner +
+  // disables the submit button. The server is the canonical evaluator ;
+  // this is purely UX feedback before the round-trip.
+  const thresholdVerdict = useMemo(() => {
+    if (!config || !config.thresholds) return 'log';
+    if (!form.parameter || form.value === '') return 'log';
+    return evaluateThreshold(config.thresholds, form.parameter, form.value);
+  }, [config, form.parameter, form.value]);
+
+  const submitBlocked = thresholdVerdict === 'block';
+
   function setTopLevel(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -154,6 +225,12 @@ export default function CaptureMeasurement() {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+    if (submitBlocked) {
+      // Client-side defense in depth ; the server is the canonical
+      // evaluator and would 400 this anyway.
+      setError('Submission blocked by instrument threshold rule.');
+      return;
+    }
     const localErrors = validateLocally();
     if (Object.keys(localErrors).length > 0) {
       setFieldErrors(localErrors);
@@ -390,9 +467,29 @@ export default function CaptureMeasurement() {
           })}
         </fieldset>
 
+        {VERDICT_BANNER[thresholdVerdict] && (
+          <div
+            className={VERDICT_BANNER[thresholdVerdict].className}
+            role="alert"
+            data-testid={`threshold-banner-${thresholdVerdict}`}
+          >
+            <strong>{VERDICT_BANNER[thresholdVerdict].headline}</strong>
+            <p>{VERDICT_BANNER[thresholdVerdict].body}</p>
+          </div>
+        )}
+
         <div className="form-footer">
-          <button type="submit" className="btn btn--primary" disabled={submitting}>
-            {submitting ? 'Capturing…' : 'Capture Measurement'}
+          <button
+            type="submit"
+            className="btn btn--primary"
+            disabled={submitting || submitBlocked}
+            title={submitBlocked ? 'Submit blocked by threshold rule' : ''}
+          >
+            {submitting
+              ? 'Capturing…'
+              : submitBlocked
+                ? 'Blocked by threshold'
+                : 'Capture Measurement'}
           </button>
         </div>
       </form>

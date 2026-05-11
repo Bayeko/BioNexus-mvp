@@ -403,6 +403,42 @@ class KarlFischerParser(BaseParser):
     _PREFIX = "KF"
     _MIN_FIELDS = 4
     _MAX_FIELDS = 7
+class AgilentChemStationParser(BaseParser):
+    """Parse Agilent ChemStation peak report CSV output.
+
+    Typical export shape (text or CSV with header + peak data lines)::
+
+        # Agilent ChemStation Peak Report
+        # Method: USP-007.M
+        # Instrument: HPLC-Agilent-1260
+        Peak,RetTime,Area,Height,Name,Unit
+        1,2.345,12345.6,234.5,Caffeine,mAU*s
+        2,3.876,8765.4,123.4,Aspirin,mAU*s
+
+    Each peak data row becomes ONE :class:`ParsedReading` where :
+      - ``parameter`` is the compound name (field 4)
+      - ``value`` is the peak area (field 2)
+      - ``unit`` is the area unit (field 5)
+      - ``protocol_meta`` carries peak_number, retention_time, height
+
+    Header lines starting with ``#`` and the ``Peak,RetTime,...`` table
+    header are rejected by :meth:`can_parse` so the parser only consumes
+    actual data rows. This keeps the BaseParser contract intact (one
+    line in, one reading out) and lets the collector dispatch line by
+    line as the ChemStation export is streamed.
+    """
+
+    name = "agilent_chemstation_v1"
+    protocol = "ChemStation"
+
+    # Indices into the comma-split row, named for readability.
+    _IDX_PEAK_NUMBER = 0
+    _IDX_RET_TIME = 1
+    _IDX_AREA = 2
+    _IDX_HEIGHT = 3
+    _IDX_NAME = 4
+    _IDX_UNIT = 5
+    _EXPECTED_FIELDS = 6
 
     @classmethod
     def can_parse(cls, line: str) -> bool:
@@ -419,6 +455,17 @@ class KarlFischerParser(BaseParser):
             float(parts[2])
         except (ValueError, IndexError):
             return False
+        if len(parts) != cls._EXPECTED_FIELDS:
+            return False
+        # Reject the table header row "Peak,RetTime,..."
+        if parts[cls._IDX_RET_TIME].lower() == "rettime":
+            return False
+        # Validate that retention_time, area, and height all parse as floats
+        for idx in (cls._IDX_RET_TIME, cls._IDX_AREA, cls._IDX_HEIGHT):
+            try:
+                float(parts[idx])
+            except ValueError:
+                return False
         return True
 
     @classmethod
@@ -468,6 +515,45 @@ PARSERS: list[type[BaseParser]] = [
     MettlerSICSParser,
     SartoriusSBIParser,
     KarlFischerParser,
+        if len(parts) != cls._EXPECTED_FIELDS:
+            return None
+
+        try:
+            peak_number = parts[cls._IDX_PEAK_NUMBER]
+            retention_time = float(parts[cls._IDX_RET_TIME])
+            area_str = parts[cls._IDX_AREA]
+            height = float(parts[cls._IDX_HEIGHT])
+            compound = parts[cls._IDX_NAME] or "unknown_peak"
+            unit = parts[cls._IDX_UNIT]
+            # Sanity-check area parses to float (we keep the string form
+            # for value so significant digits are preserved through the
+            # SHA-256 hash, mirroring the other parsers' behaviour).
+            float(area_str)
+        except (ValueError, IndexError):
+            return None
+
+        return ParsedReading(
+            parameter=compound,
+            value=area_str,
+            unit=unit,
+            source_timestamp=datetime.now(timezone.utc).isoformat(),
+            raw=line.rstrip("\r\n"),
+            protocol_meta={
+                "peak_number": peak_number,
+                "retention_time_min": retention_time,
+                "height": height,
+            },
+        )
+
+
+# Parser dispatch — order matters. The most specific patterns come first,
+# so a row that matches both Agilent (6 fields, exact shape) and the
+# fall-through GenericCSV (3+ fields with a numeric second field) is
+# claimed by Agilent. GenericCSV remains the last-resort handler.
+PARSERS: list[type[BaseParser]] = [
+    MettlerSICSParser,
+    SartoriusSBIParser,
+    AgilentChemStationParser,
     GenericCSVParser,
 ]
 

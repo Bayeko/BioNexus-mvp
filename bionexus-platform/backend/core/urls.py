@@ -13,15 +13,17 @@ from core.export_views import (
     export_audit_csv,
 )
 from core.webhook_views import WebhookSubscriptionViewSet, WebhookEventListView
-from modules.instruments.views import InstrumentViewSet
-from modules.measurements.views import MeasurementViewSet
+from modules.instruments.views import InstrumentViewSet, InstrumentConfigViewSet
+from modules.measurements.views import MeasurementViewSet, MeasurementContextViewSet
 from modules.protocols.views import ProtocolViewSet
 from modules.samples.views import SampleViewSet
 
 router = DefaultRouter()
 router.register(r"instruments", InstrumentViewSet, basename="instrument")
+router.register(r"instrument-configs", InstrumentConfigViewSet, basename="instrumentconfig")
 router.register(r"samples", SampleViewSet, basename="sample")
 router.register(r"measurements", MeasurementViewSet, basename="measurement")
+router.register(r"measurement-contexts", MeasurementContextViewSet, basename="measurementcontext")
 router.register(r"protocols", ProtocolViewSet, basename="protocol")
 router.register(r"audit", AuditLogViewSet, basename="auditlog")
 router.register(r"webhooks", WebhookSubscriptionViewSet, basename="webhook")

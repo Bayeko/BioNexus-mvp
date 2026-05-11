@@ -9,6 +9,7 @@ import AuditLog from './pages/AuditLog';
 import Parsing from './pages/Parsing';
 import MeasurementsGlobal from './pages/MeasurementsGlobal';
 import Integrations from './pages/Integrations';
+import CaptureMeasurement from './pages/CaptureMeasurement';
 
 export default function AppRoutes() {
   return (
@@ -19,6 +20,7 @@ export default function AppRoutes() {
         <Route path="/samples" element={<Samples />} />
         <Route path="/samples/:sampleId/measurements" element={<Measurements />} />
         <Route path="/measurements" element={<MeasurementsGlobal />} />
+        <Route path="/capture" element={<CaptureMeasurement />} />
         <Route path="/audit" element={<AuditLog />} />
         <Route path="/parsing" element={<Parsing />} />
         <Route path="/integrations" element={<Integrations />} />

@@ -31,6 +31,7 @@ class InstrumentConfig(models.Model):
         ("sartorius_sbi_v1", "Sartorius SBI"),
         ("generic_csv_v1", "Generic CSV"),
         ("agilent_chemstation_v1", "Agilent ChemStation"),
+        ("karl_fischer_v1", "Karl Fischer Titrator"),
         ("waters_empower_v1", "Waters Empower"),
         ("dissolution_ascii_v1", "Dissolution ASCII"),
     ]

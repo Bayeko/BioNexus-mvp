@@ -104,11 +104,33 @@ def csv_spectro_frames(count: int) -> list[str]:
     return frames
 
 
+def karl_fischer_frames(count: int) -> list[str]:
+    """Generate Karl Fischer titrator result rows.
+
+    Format : ``KF,water_content,<value>,%,<sample_id>,<volume_ml>,<drift>``
+    Mirrors the CSV transfer-mode output of Mettler T-series and Metrohm
+    KF titrators. Water content typically lands between 0.05 % and 5 %
+    depending on sample type (pharma APIs are often in 0.1 to 2 %).
+    """
+    frames = []
+    for i in range(count):
+        water_content = random.uniform(0.05, 2.5)
+        volume_ml = random.uniform(5.0, 20.0)
+        drift = random.uniform(2.0, 8.0)
+        sample = f"KF-Sample-{i + 1:03d}"
+        frames.append(
+            f"KF,water_content,{water_content:.3f},%,"
+            f"{sample},{volume_ml:.2f},{drift:.1f}"
+        )
+    return frames
+
+
 PROTOCOLS = {
     "sics": ("Mettler Toledo SICS (Balance)", mettler_sics_frames),
     "sbi": ("Sartorius SBI (Balance)", sartorius_sbi_frames),
     "csv": ("Generic CSV (pH Meter)", csv_ph_frames),
     "spectro": ("CSV Spectrophotometer", csv_spectro_frames),
+    "kf": ("Karl Fischer Titrator", karl_fischer_frames),
 }
 
 

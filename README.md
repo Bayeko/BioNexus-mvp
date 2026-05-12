@@ -20,7 +20,7 @@
 | Layer          | Technology                                           |
 |----------------|------------------------------------------------------|
 | **Backend**    | Django 5.2, Django REST Framework, Python 3.11       |
-| **Frontend**   | React 18, React Router v6, TypeScript (partial), Vite 5 |
+| **Frontend**   | React 18, React Router v6, Vite 5                    |
 | **Database**   | PostgreSQL (production) / SQLite (development)       |
 | **Auth**       | JWT (15min access / 7d refresh), OTP for certification |
 | **Testing**    | pytest (backend), Vitest + React Testing Library (frontend) |
@@ -51,23 +51,24 @@ BioNexus-mvp/
 │   │   └── modules/
 │   │       ├── samples/               # Sample CRUD with soft-delete
 │   │       └── protocols/             # Protocol CRUD with soft-delete
+│   ├── box/                            # BioNexus Box gateway (RS232/USB → cloud)
+│   │   ├── box_collector.py            # Parser registry + offline SQLite queue
+│   │   ├── simulate_instrument.py
+│   │   └── tests/test_parsers.py
 │   └── frontend/
 │       ├── package.json
 │       └── src/
-│           ├── main.jsx               # React DOM mount point
-│           ├── App.jsx                # Root component with BrowserRouter
-│           ├── routes.jsx             # Route definitions
-│           ├── config.ts              # Feature flags & compliance settings
-│           ├── components/
-│           │   └── ParsingValidation/ # Split-view UI components
-│           │       ├── ParsingValidationComponent.tsx
-│           │       ├── DynamicFormBuilder.tsx
-│           │       ├── RawFileViewer.tsx
-│           │       ├── CorrectionTracker.tsx
-│           │       ├── ChainIntegrityBadge.tsx
-│           │       └── CertificationModal.tsx
-│           ├── services/              # API clients (parsing, integrity, crypto)
-│           └── __tests__/             # Frontend tests
+│           ├── main.jsx                # React DOM mount point
+│           ├── App.jsx                 # Root component with BrowserRouter
+│           ├── routes.jsx              # Route definitions
+│           ├── api.js                  # Axios-free fetch API client
+│           ├── theme.css               # Global theme tokens
+│           ├── components/             # CertificationModal, DataTable,
+│           │                           # Layout, MeasurementChart, StatusBadge
+│           ├── pages/                  # Dashboard, Instruments, Samples,
+│           │                           # Measurements, Parsing, Integrations,
+│           │                           # CaptureMeasurement, AuditLog
+│           └── __tests__/              # Vitest frontend tests
 ├── conftest.py                        # Pytest configuration
 ├── DOCUMENTATION.md                   # Full technical documentation (FR)
 ├── QUICK_START.md                     # Quick start guide with workflow examples
@@ -97,6 +98,63 @@ BioNexus-mvp/
 | **Executions**     | Tracking protocol runs at `/api/executions/`               |
 | **Audit**          | Chain verification at `/api/audit/verify-chain/`           |
 | **Reports**        | Certified PDFs at `/api/reports/{id}/pdf/`                 |
+| **Veeva Vault**    | `GET /api/integrations/veeva/status/`, `GET /api/integrations/veeva/log/` |
+
+---
+
+## LIMS / QMS / ELN integration suite
+
+BioNexus pushes every captured `Measurement` to one or more downstream systems. Five vendors are supported today:
+
+| Vendor | Code | Object pushed | Notes |
+|---|---|---|---|
+| Veeva Vault QMS | `veeva` | `quality_event__v` + `document__v` (PDF) | Spec: [docs/VEEVA_INTEGRATION_SPEC.md](docs/VEEVA_INTEGRATION_SPEC.md) (LBN-INT-VEEVA-001 v0.1) |
+| Waters Empower | `empower` | `Result` (sample-results endpoint) | HPLC/UPLC CDS — typically the highest-volume QC system |
+| LabWare LIMS | `labware` | `Result` (LabWare REST v1) | ApiKey auth |
+| STARLIMS | `starlims` | `TestResult` (STARLIMS REST) | X-Api-Key header |
+| Benchling ELN | `benchling` | `ResultRow` (Benchling API v2, schema-driven) | Bearer token, requires schema ID |
+
+Each connector runs in one of four modes via `<VENDOR>_MODE`:
+
+| Mode | What happens | When to use |
+|---|---|---|
+| `disabled` (default) | No outbound network calls | Production until a customer is on-boarded |
+| `mock` | Pushes to the local unified mock server (`:8001`) | Local dev, FL Basel demo, retry/DLQ verification |
+| `sandbox` | Pushes to a real vendor sandbox tenant | After vendor partner-program approval |
+| `prod` | Pushes to a production tenant (gated by `<VENDOR>_PROD_CONFIRMED=true`) | First paying customer |
+
+### Architecture
+
+```
+modules/integrations/
+├── base/                       Shared HTTP client, retry, signing, mock dispatcher
+├── veeva/                      Veeva-specific paths + mock routes
+└── lims_connectors/            Umbrella app hosting:
+    ├── empower/                Waters Empower
+    ├── labware/                LabWare LIMS
+    ├── starlims/               STARLIMS
+    └── benchling/              Benchling ELN
+```
+
+Every push goes through the same `IntegrationPushLog` table with a `vendor` field, so QA can audit any vendor's history via one query path: `GET /api/integrations/veeva/log/?vendor=<name>`.
+
+### Local end-to-end demo
+
+```bash
+# Terminal 1 — unified mock server serves all 5 vendor flavours on :8001
+cd bionexus-platform/backend
+../../.venv/Scripts/python.exe manage.py lims_mock_server
+
+# Terminal 2 — enable every vendor and start the backend
+cp ../.env.example ../.env   # then set <VENDOR>_MODE=mock + INTEGRATION_ENABLED=true
+                              # + BASE_URL=http://localhost:8001/<vendor> for each
+../../.venv/Scripts/python.exe manage.py runserver
+
+# Terminal 3 — fire 1 measurement, watch it push to all 5 vendors
+../../.venv/Scripts/python.exe demo_lims.py
+```
+
+To demo retries against any vendor: `export LIMS_MOCK_FAIL_RATE=0.3` before starting the mock server — 30% of requests will return 500 and trigger the exponential-backoff + dead-letter path.
 
 ---
 
@@ -212,7 +270,7 @@ Instrument File (CSV/text)
 | Layer | Technology |
 |-------|-----------|
 | Backend API | Django REST Framework (Python 3.12) |
-| Frontend | React 18 + TypeScript + Vite |
+| Frontend | React 18 + React Router v6 + Vite 5 |
 | Database | PostgreSQL 15+ |
 | Authentication | JWT (access + refresh tokens) + TOTP 2FA (pyotp) |
 | Data Validation | Pydantic (strict mode, extra="forbid") |

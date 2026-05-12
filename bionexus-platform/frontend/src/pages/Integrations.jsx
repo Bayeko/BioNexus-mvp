@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import StatusBadge from '../components/StatusBadge';
 
 /* ── Integration Definitions ─────────────────────────────── */
@@ -69,8 +69,10 @@ const INTEGRATIONS = [
     id: 'empower',
     name: 'Waters Empower',
     category: 'LIMS / CDS',
-    description: 'Direct integration with Waters Empower for HPLC/UPLC data exchange.',
-    status: 'roadmap',
+    description: 'Push HPLC/UPLC results into Waters Empower CDS as Result objects (v1 = push only).',
+    status: 'mock_active',
+    livePushLog: true,
+    vendor: 'empower',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <circle cx="12" cy="12" r="10" />
@@ -78,19 +80,28 @@ const INTEGRATIONS = [
       </svg>
     ),
     mapping: [
-      { bionexus: 'Instrument', empower: 'System', direction: 'sync' },
-      { bionexus: 'Sample ID', empower: 'Sample Set', direction: 'push' },
-      { bionexus: 'Measurement', empower: 'Result', direction: 'push' },
-      { bionexus: 'Audit Log', empower: 'Audit Trail', direction: 'push' },
+      { bionexus: 'Sample.sample_id', empower: 'sampleName', direction: 'push' },
+      { bionexus: 'Measurement.parameter', empower: 'peakName', direction: 'push' },
+      { bionexus: 'Measurement.value', empower: 'amount', direction: 'push' },
+      { bionexus: 'Measurement.unit', empower: 'unit', direction: 'push' },
+      { bionexus: 'context.operator', empower: 'operator', direction: 'push' },
+      { bionexus: 'context.lot_number', empower: 'lotNumber', direction: 'push' },
     ],
-    features: ['Empower Web API', 'Automatic field mapping', 'Bi-directional sync', 'GxP compliant transfer'],
+    features: [
+      'REST POST to /empower/v1.0/sample-results',
+      'API key auth via X-API-Key header',
+      'HMAC-SHA256 outbound signature',
+      'Mode-switchable: disabled / mock / sandbox / prod',
+    ],
   },
   {
     id: 'labware',
     name: 'LabWare LIMS',
     category: 'LIMS / CDS',
-    description: 'Integration module for LabWare LIMS — exchange samples, results and audit data.',
-    status: 'roadmap',
+    description: 'Push measurement results into LabWare LIMS via the REST API (v1 = push only).',
+    status: 'mock_active',
+    livePushLog: true,
+    vendor: 'labware',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <rect x="2" y="3" width="20" height="14" rx="2" />
@@ -98,15 +109,60 @@ const INTEGRATIONS = [
         <line x1="12" y1="17" x2="12" y2="21" />
       </svg>
     ),
-    features: ['REST + SOAP support', 'Sample lifecycle sync', 'Result auto-import', 'Configurable field mapping'],
+    mapping: [
+      { bionexus: 'Sample.sample_id', empower: 'sample_id', direction: 'push' },
+      { bionexus: 'context.lot_number', empower: 'lot_no', direction: 'push' },
+      { bionexus: 'context.method', empower: 'analysis', direction: 'push' },
+      { bionexus: 'Measurement.parameter', empower: 'test_name', direction: 'push' },
+      { bionexus: 'Measurement.value', empower: 'result_value', direction: 'push' },
+      { bionexus: 'Instrument.serial', empower: 'instrument', direction: 'push' },
+    ],
+    features: [
+      'REST POST to /labware/api/v1/results',
+      'ApiKey-based auth',
+      'HMAC-SHA256 outbound signature',
+      'Mode-switchable: disabled / mock / sandbox / prod',
+    ],
+  },
+  {
+    id: 'starlims',
+    name: 'STARLIMS',
+    category: 'LIMS / CDS',
+    description: 'Push test results into STARLIMS via the REST API (v1 = push only).',
+    status: 'mock_active',
+    livePushLog: true,
+    vendor: 'starlims',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.8 5.8 21 7 14 2 9.3 9 8.5 12 2" />
+      </svg>
+    ),
+    mapping: [
+      { bionexus: 'Sample.sample_id', empower: 'sample', direction: 'push' },
+      { bionexus: 'context.lot_number', empower: 'batch', direction: 'push' },
+      { bionexus: 'Measurement.parameter', empower: 'test', direction: 'push' },
+      { bionexus: 'Measurement.value', empower: 'value', direction: 'push' },
+      { bionexus: 'Measurement.unit', empower: 'units', direction: 'push' },
+      { bionexus: 'context.operator', empower: 'operator', direction: 'push' },
+    ],
+    features: [
+      'REST POST to /starlims/api/test-results',
+      'API key via X-Api-Key header',
+      'HMAC-SHA256 outbound signature',
+      'Mode-switchable: disabled / mock / sandbox / prod',
+    ],
   },
   {
     id: 'veeva',
     name: 'Veeva Vault QMS',
     category: 'QMS',
     description: 'Push Labionexus quality events and measurement context into Veeva Vault QMS for centralized batch release workflows.',
-    status: 'roadmap',
-    roadmapLabel: 'Q3 2026',
+    // status is "mock_active" when VEEVA_MODE=mock — runtime label below
+    // is fetched live from /api/integrations/veeva/status/ so the badge
+    // reflects reality, not a hardcoded marketing string.
+    status: 'mock_active',
+    livePushLog: true,
+    vendor: 'veeva',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M21 8V7l-3-2-3 2v1l-2-1-3 2v1L8 9l-3 2v1L3 12v9h18v-9l-2-1V8z" />
@@ -121,31 +177,50 @@ const INTEGRATIONS = [
       { bionexus: 'Lot number', empower: 'lot__v', direction: 'push' },
     ],
     features: [
-      'OAuth2 against Veeva Vault sandbox + production',
-      'VQL-backed object lookups',
-      'Signed payloads (HMAC-SHA256) with retry + dead-letter',
+      'HMAC-SHA256 signed payloads (defense-in-depth over TLS)',
+      'Exponential backoff + dead-letter queue on retries',
       'Field mapping respects 21 CFR Part 11 §11.10 attribution',
+      'Mode-switchable: disabled / mock / sandbox / prod',
     ],
   },
   {
     id: 'benchling',
     name: 'Benchling ELN',
     category: 'ELN',
-    description: 'Push instrument data and results directly into Benchling notebooks.',
-    status: 'roadmap',
+    description: 'Push measurement rows into Benchling Result Tables via the API v2 (v1 = push only).',
+    status: 'mock_active',
+    livePushLog: true,
+    vendor: 'benchling',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
         <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
       </svg>
     ),
-    features: ['Benchling API v2', 'Auto-attach results to entries', 'Structured data tables', 'Link instrument runs'],
+    mapping: [
+      { bionexus: 'Sample.sample_id', empower: 'fields.sampleId', direction: 'push' },
+      { bionexus: 'Measurement.parameter', empower: 'fields.parameter', direction: 'push' },
+      { bionexus: 'Measurement.value', empower: 'fields.value', direction: 'push' },
+      { bionexus: 'Measurement.unit', empower: 'fields.unit', direction: 'push' },
+      { bionexus: 'context.operator', empower: 'fields.operator', direction: 'push' },
+      { bionexus: 'context.lot_number', empower: 'fields.lotNumber', direction: 'push' },
+    ],
+    features: [
+      'REST POST to /benchling/v2/result-rows',
+      'Bearer token auth (BENCHLING_API_TOKEN)',
+      'Schema-driven via BENCHLING_RESULT_SCHEMA_ID',
+      'Mode-switchable: disabled / mock / sandbox / prod',
+    ],
   },
 ];
 
 const STATUS_MAP = {
   active: { label: 'Active', className: 'online' },
   configured: { label: 'Configured', className: 'pending' },
+  // mock_active = "code exists and runs, but against a local mock — not
+  // a real third-party tenant". Amber on purpose: not red (it works),
+  // not green (don't claim production).
+  mock_active: { label: 'MOCK MODE', className: 'pending' },
   roadmap: { label: 'Roadmap', className: 'offline' },
 };
 
@@ -311,6 +386,133 @@ function DetailPanel({ integration }) {
           Contact us to discuss your specific requirements and timeline.
         </div>
       )}
+
+      {/* Live push log (vendor mock/sandbox modes) */}
+      {integration.livePushLog && (
+        <LimsPushLogPanel vendor={integration.vendor} vendorName={integration.name} />
+      )}
+    </div>
+  );
+}
+
+/* ── LIMS push log panel ──────────────────────────────────────
+ *
+ * Reads /api/integrations/veeva/status/ and
+ * /api/integrations/veeva/log/?vendor=<vendor> — same backend serves
+ * all vendors via the IntegrationPushLog table's ``vendor`` field.
+ *
+ * Renders a compact dense table — QA users live in tables. Monospace
+ * for IDs and hashes so columns line up; no decorative gradients.
+ */
+
+function LimsPushLogPanel({ vendor, vendorName }) {
+  const [status, setStatus] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        const params = vendor ? `?vendor=${encodeURIComponent(vendor)}` : '';
+        const [statusResp, logResp] = await Promise.all([
+          fetch(`/api/integrations/veeva/status/${params}`),
+          fetch(`/api/integrations/veeva/log/${params}${params ? '&' : '?'}limit=10`),
+        ]);
+        if (!active) return;
+        if (statusResp.ok) {
+          setStatus(await statusResp.json());
+        }
+        if (logResp.ok) {
+          const data = await logResp.json();
+          const list = Array.isArray(data) ? data : (data.results || []);
+          setRows(list.slice(0, 10));
+        }
+        setError(null);
+      } catch (err) {
+        if (active) setError(err.message);
+      }
+    }
+    load();
+    const id = setInterval(load, 5000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [vendor]);
+
+  return (
+    <div className="integ-detail-section">
+      <h4>Live push log{vendorName ? ` — ${vendorName}` : ''}</h4>
+      {status && (
+        <div
+          style={{
+            display: 'flex',
+            gap: 16,
+            alignItems: 'center',
+            marginBottom: 12,
+            fontSize: 13,
+          }}
+        >
+          <span style={{ fontWeight: 600 }}>Mode:</span>
+          <code>{status.mode}</code>
+          <span style={{ opacity: 0.6 }}>·</span>
+          <span style={{ fontWeight: 600 }}>Status:</span>
+          <span>{status.label}</span>
+          <span style={{ opacity: 0.6 }}>·</span>
+          <span>
+            <strong>{status.counts?.success || 0}</strong> success
+            {' / '}
+            <strong>{status.counts?.failed || 0}</strong> failed
+            {' / '}
+            <strong>{status.counts?.dead_letter || 0}</strong> dead
+          </span>
+        </div>
+      )}
+      {error && <p style={{ color: '#c0392b' }}>Cannot reach push log: {error}</p>}
+      <table className="integ-mapping-table" style={{ fontSize: 12 }}>
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Source</th>
+            <th>Object</th>
+            <th>External ID</th>
+            <th>Status</th>
+            <th>Attempts</th>
+            <th>HTTP</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={7} style={{ textAlign: 'center', opacity: 0.6 }}>
+                No push attempts recorded yet.
+              </td>
+            </tr>
+          )}
+          {rows.map((r) => (
+            <tr key={r.id}>
+              <td>
+                <code>
+                  {r.created_at ? new Date(r.created_at).toLocaleTimeString() : '—'}
+                </code>
+              </td>
+              <td>
+                {r.source_measurement_id
+                  ? <>Measurement #{r.source_measurement_id}</>
+                  : r.source_report_id
+                    ? <>Report #{r.source_report_id}</>
+                    : '—'}
+              </td>
+              <td><code>{r.target_object_type}</code></td>
+              <td><code>{r.target_object_id || '—'}</code></td>
+              <td>{r.status}</td>
+              <td>{r.attempts}</td>
+              <td>{r.http_status ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

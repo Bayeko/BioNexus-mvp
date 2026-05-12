@@ -42,6 +42,7 @@ urlpatterns = [
     path("api/reports/<int:pk>/sign/", certification_sign, name="report-sign"),
     path("api/persistence/", include("modules.persistence.urls")),
     path("api/parsing/", include("core.parsing_urls")),
+    path("api/integrations/veeva/", include("modules.integrations.veeva.urls")),
     # Export endpoints
     path("api/export/", export_formats),
     path("api/export/measurements/csv/", export_measurements_csv),

@@ -32,5 +32,7 @@ test('renders audit log page', () => {
       <AppRoutes />
     </MemoryRouter>
   );
-  expect(screen.getByRole('heading', { name: /audit log/i })).toBeInTheDocument();
+  // Page heading uses the 21 CFR Part 11 term "Audit Trail" (nav link
+  // label is "Audit Log").
+  expect(screen.getByRole('heading', { name: /audit trail/i })).toBeInTheDocument();
 });

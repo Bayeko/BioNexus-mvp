@@ -49,6 +49,8 @@ INSTALLED_APPS = [
     "modules.measurements",
     "modules.protocols",
     "modules.persistence",
+    "modules.integrations.veeva",
+    "modules.integrations.lims_connectors",
 ]
 
 MIDDLEWARE = [
@@ -145,6 +147,68 @@ USE_TZ = True
 
 # Static files
 STATIC_URL = "static/"
+
+
+# ---------------------------------------------------------------------------
+# Veeva Vault integration (LBN-INT-VEEVA-001)
+# ---------------------------------------------------------------------------
+# VEEVA_MODE pickin order: disabled (default, prod-safe) | mock | sandbox | prod.
+# "disabled" guarantees no outbound network calls regardless of any other
+# setting, so a misconfigured prod won't accidentally fire pushes.
+VEEVA_MODE = os.environ.get("VEEVA_MODE", "disabled")
+VEEVA_INTEGRATION_ENABLED = (
+    os.environ.get("VEEVA_INTEGRATION_ENABLED", "false").lower() == "true"
+)
+VEEVA_BASE_URL = os.environ.get("VEEVA_BASE_URL", "")
+VEEVA_SHARED_SECRET = os.environ.get("VEEVA_SHARED_SECRET", "")
+# Production guard: prod mode also requires VEEVA_PROD_CONFIRMED=true (read
+# directly from os.environ in client.py — kept out of settings so the prod
+# guard can't be bypassed via a Django settings override in tests).
+
+
+# ---------------------------------------------------------------------------
+# LIMS / ELN / CDS connectors (modules.integrations.lims_connectors)
+# ---------------------------------------------------------------------------
+# Each vendor follows the same env-var pattern:
+#   <VENDOR>_MODE                  : disabled (default) | mock | sandbox | prod
+#   <VENDOR>_INTEGRATION_ENABLED   : "true" to wire post_save(Measurement)
+#   <VENDOR>_BASE_URL              : target host (mock: http://localhost:8001)
+#   <VENDOR>_SHARED_SECRET         : HMAC signing secret
+#   <VENDOR>_PROD_CONFIRMED        : env-only "true" to allow prod mode
+# Authentication tokens are vendor-specific and read directly from
+# os.environ inside each client's _auth_headers().
+
+# Waters Empower Web API
+EMPOWER_MODE = os.environ.get("EMPOWER_MODE", "disabled")
+EMPOWER_INTEGRATION_ENABLED = (
+    os.environ.get("EMPOWER_INTEGRATION_ENABLED", "false").lower() == "true"
+)
+EMPOWER_BASE_URL = os.environ.get("EMPOWER_BASE_URL", "")
+EMPOWER_SHARED_SECRET = os.environ.get("EMPOWER_SHARED_SECRET", "")
+
+# LabWare LIMS
+LABWARE_MODE = os.environ.get("LABWARE_MODE", "disabled")
+LABWARE_INTEGRATION_ENABLED = (
+    os.environ.get("LABWARE_INTEGRATION_ENABLED", "false").lower() == "true"
+)
+LABWARE_BASE_URL = os.environ.get("LABWARE_BASE_URL", "")
+LABWARE_SHARED_SECRET = os.environ.get("LABWARE_SHARED_SECRET", "")
+
+# STARLIMS
+STARLIMS_MODE = os.environ.get("STARLIMS_MODE", "disabled")
+STARLIMS_INTEGRATION_ENABLED = (
+    os.environ.get("STARLIMS_INTEGRATION_ENABLED", "false").lower() == "true"
+)
+STARLIMS_BASE_URL = os.environ.get("STARLIMS_BASE_URL", "")
+STARLIMS_SHARED_SECRET = os.environ.get("STARLIMS_SHARED_SECRET", "")
+
+# Benchling ELN
+BENCHLING_MODE = os.environ.get("BENCHLING_MODE", "disabled")
+BENCHLING_INTEGRATION_ENABLED = (
+    os.environ.get("BENCHLING_INTEGRATION_ENABLED", "false").lower() == "true"
+)
+BENCHLING_BASE_URL = os.environ.get("BENCHLING_BASE_URL", "")
+BENCHLING_SHARED_SECRET = os.environ.get("BENCHLING_SHARED_SECRET", "")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

@@ -1,6 +1,7 @@
 
 # Environnements virtuels
 venv/
+.venv/
 __pycache__/
 *.pyc
 
@@ -34,3 +35,9 @@ Thumbs.db
 
 # Binary downloads
 *.zip
+
+# LIMS mock server runtime state (Veeva-only legacy + unified)
+mock_vault_state/
+lims_mock_state/
+bionexus-platform/backend/mock_vault_state/
+bionexus-platform/backend/lims_mock_state/

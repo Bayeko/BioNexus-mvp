@@ -372,6 +372,37 @@ class GenericCSVParser(BaseParser):
         )
 
 
+class KarlFischerParser(BaseParser):
+    """Parse Karl Fischer titrator output (Mettler T-series, Metrohm).
+
+    KF titrators print result lines over RS232 in a comma-separated
+    format prefixed with the literal ``KF`` so a single dispatch round
+    is enough to distinguish them from Generic CSV (which has no
+    instrument-class prefix). The accepted shape is::
+
+        KF,<parameter>,<value>,<unit>[,<sample_id>[,<volume_ml>[,<drift_ug_min>]]]
+
+    Examples (both accepted)::
+
+        KF,water_content,0.123,%
+        KF,water_content,0.123,%,Sample-001,12.34,5.0
+
+    The parameter and value are the user-visible result, the optional
+    trailing fields land in ``protocol_meta`` so they ride along into
+    the audit trail without polluting the canonical Measurement row.
+
+    Multi-line text exports (``Sample: ...\\nWater content: 0.123 %``)
+    are NOT supported by this parser ; the Box gateway dispatches one
+    line at a time, so legacy multi-line printouts must be reformatted
+    upstream. This matches what real KF transfer-mode output looks like
+    when the instrument is configured for CSV export.
+    """
+
+    name = "karl_fischer_v1"
+    protocol = "KF"
+    _PREFIX = "KF"
+    _MIN_FIELDS = 4
+    _MAX_FIELDS = 7
 class AgilentChemStationParser(BaseParser):
     """Parse Agilent ChemStation peak report CSV output.
 
@@ -415,6 +446,15 @@ class AgilentChemStationParser(BaseParser):
         if not stripped or stripped.startswith("#"):
             return False
         parts = [p.strip() for p in stripped.split(",")]
+        if parts[0] != cls._PREFIX:
+            return False
+        if not (cls._MIN_FIELDS <= len(parts) <= cls._MAX_FIELDS):
+            return False
+        # Field 2 (value) must be numeric
+        try:
+            float(parts[2])
+        except (ValueError, IndexError):
+            return False
         if len(parts) != cls._EXPECTED_FIELDS:
             return False
         # Reject the table header row "Peak,RetTime,..."
@@ -431,6 +471,50 @@ class AgilentChemStationParser(BaseParser):
     @classmethod
     def extract(cls, line: str) -> Optional[ParsedReading]:
         parts = [p.strip() for p in line.strip().split(",")]
+        if len(parts) < cls._MIN_FIELDS or parts[0] != cls._PREFIX:
+            return None
+
+        try:
+            parameter = parts[1] or "water_content"
+            value_str = parts[2]
+            unit = parts[3]
+            float(value_str)  # sanity check
+        except (ValueError, IndexError):
+            return None
+
+        protocol_meta: dict = {}
+        # Optional trailing fields, in fixed order
+        if len(parts) > 4 and parts[4]:
+            protocol_meta["sample_id"] = parts[4]
+        if len(parts) > 5 and parts[5]:
+            try:
+                protocol_meta["volume_ml"] = float(parts[5])
+            except ValueError:
+                protocol_meta["volume_ml"] = parts[5]
+        if len(parts) > 6 and parts[6]:
+            try:
+                protocol_meta["drift_ug_per_min"] = float(parts[6])
+            except ValueError:
+                protocol_meta["drift_ug_per_min"] = parts[6]
+
+        return ParsedReading(
+            parameter=parameter,
+            value=value_str,
+            unit=unit,
+            source_timestamp=datetime.now(timezone.utc).isoformat(),
+            raw=line.rstrip("\r\n"),
+            protocol_meta=protocol_meta,
+        )
+
+
+# Parser dispatch — order matters. The most specific patterns come first
+# so a row that matches both a specific protocol (KF prefix, Agilent 6-
+# field shape) and the fall-through GenericCSV is claimed by the more
+# specific one. GenericCSV remains the last-resort handler.
+PARSERS: list[type[BaseParser]] = [
+    MettlerSICSParser,
+    SartoriusSBIParser,
+    KarlFischerParser,
         if len(parts) != cls._EXPECTED_FIELDS:
             return None
 

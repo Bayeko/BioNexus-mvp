@@ -26,6 +26,7 @@ from box_collector import (  # noqa: E402
     BaseParser,
     CaptureContext,
     GenericCSVParser,
+    KarlFischerParser,
     MettlerSICSParser,
     ParsedReading,
     PARSERS,
@@ -203,6 +204,63 @@ class TestGenericCSVParser:
 
 
 # ---------------------------------------------------------------------------
+# KarlFischerParser
+# ---------------------------------------------------------------------------
+
+class TestKarlFischerParser:
+    """Tests for the Karl Fischer titrator parser (D7 T23).
+
+    Format: ``KF,<parameter>,<value>,<unit>[,<sample_id>[,<vol>[,<drift>]]]``
+    """
+
+    MINIMAL = "KF,water_content,0.123,%"
+    FULL = "KF,water_content,0.456,%,Sample-001,12.34,5.0"
+
+    def test_parse_minimal_form(self, ctx: CaptureContext) -> None:
+        result = KarlFischerParser.parse(self.MINIMAL, ctx)
+        assert result is not None
+        assert result["parameter"] == "water_content"
+        assert result["value"] == "0.123"
+        assert result["unit"] == "%"
+        assert result["protocol_meta"]["protocol"] == "KF"
+        assert result["protocol_meta"]["parser"] == "karl_fischer_v1"
+
+    def test_parse_full_form_includes_optional_metadata(
+        self, ctx: CaptureContext,
+    ) -> None:
+        result = KarlFischerParser.parse(self.FULL, ctx)
+        assert result is not None
+        assert result["value"] == "0.456"
+        meta = result["protocol_meta"]
+        assert meta["sample_id"] == "Sample-001"
+        assert meta["volume_ml"] == 12.34
+        assert meta["drift_ug_per_min"] == 5.0
+
+    def test_can_parse_requires_kf_prefix(self) -> None:
+        # No prefix => GenericCSV would handle it, KF must not
+        assert KarlFischerParser.can_parse("water_content,0.123,%,Sample-001") is False
+
+    def test_can_parse_rejects_non_numeric_value(self) -> None:
+        assert KarlFischerParser.can_parse("KF,water_content,not-numeric,%") is False
+
+    def test_can_parse_rejects_too_few_fields(self) -> None:
+        assert KarlFischerParser.can_parse("KF,water_content,0.123") is False
+
+    def test_dispatch_routes_to_kf_not_generic_csv(self, ctx: CaptureContext) -> None:
+        """parse_line must pick KarlFischerParser for KF-prefixed lines."""
+        result = parse_line(self.MINIMAL, ctx)
+        assert result is not None
+        assert result["protocol_meta"]["parser"] == "karl_fischer_v1"
+
+    def test_hash_includes_metadata(self, ctx: CaptureContext) -> None:
+        a = KarlFischerParser.parse(self.MINIMAL, ctx)
+        other_ctx = CaptureContext(**{**ctx.to_dict(), "lot_number": "LOT-Z"})
+        b = KarlFischerParser.parse(self.MINIMAL, other_ctx)
+        assert a["data_hash"] != b["data_hash"]
+
+    def test_does_not_claim_generic_csv_rows(self) -> None:
+        """A 3-field generic CSV row must still go to GenericCSVParser."""
+        assert KarlFischerParser.can_parse("pH,7.42,pH") is False
 # AgilentChemStationParser
 # ---------------------------------------------------------------------------
 

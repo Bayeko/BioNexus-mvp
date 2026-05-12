@@ -462,13 +462,209 @@ class AgilentChemStationParser(BaseParser):
         )
 
 
+class WatersEmpowerParser(BaseParser):
+    """Parse Waters Empower CDS print-to-serial / ASCII Result Set export.
+
+    Empower exports HPLC/UPLC peak results in a pipe-delimited row,
+    one peak per line, with a fixed 10-field shape::
+
+        SampleName|SampleID|Method|Injection|PeakName|RetTime|Area|Height|Amount|Units
+
+    Example::
+
+        QC-100|S-001|USP-007|1|Caffeine|2.456|123456.7|2345.1|99.82|%
+        QC-100|S-001|USP-007|1|Aspirin|3.876|87654.3|1234.5|0.18|%
+
+    The chosen ``value`` is the **assay amount** (field 9), not the raw
+    peak area, because the assay amount is the regulatory release value
+    that Empower itself computes against the standard curve. ``Area``
+    and ``Height`` are preserved in ``protocol_meta`` for traceability.
+
+    Pipe delimiter is used as the discriminator: comma-delimited rows
+    are claimed by Agilent (6 fields) or GenericCSV (3 fields), so no
+    dispatch ambiguity with the other parsers. Header rows
+    (``SampleName|...``) and ``#`` comments are rejected by
+    :meth:`can_parse`.
+    """
+
+    name = "waters_empower_v1"
+    protocol = "Empower"
+
+    _IDX_SAMPLE_NAME = 0
+    _IDX_SAMPLE_ID = 1
+    _IDX_METHOD = 2
+    _IDX_INJECTION = 3
+    _IDX_PEAK_NAME = 4
+    _IDX_RET_TIME = 5
+    _IDX_AREA = 6
+    _IDX_HEIGHT = 7
+    _IDX_AMOUNT = 8
+    _IDX_UNITS = 9
+    _EXPECTED_FIELDS = 10
+
+    @classmethod
+    def can_parse(cls, line: str) -> bool:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            return False
+        parts = [p.strip() for p in stripped.split("|")]
+        if len(parts) != cls._EXPECTED_FIELDS:
+            return False
+        # Reject the column-header row.
+        if parts[cls._IDX_SAMPLE_NAME].lower() == "samplename":
+            return False
+        # Numeric sanity on RetTime, Area, Height, Amount.
+        for idx in (
+            cls._IDX_RET_TIME,
+            cls._IDX_AREA,
+            cls._IDX_HEIGHT,
+            cls._IDX_AMOUNT,
+        ):
+            try:
+                float(parts[idx])
+            except ValueError:
+                return False
+        return True
+
+    @classmethod
+    def extract(cls, line: str) -> Optional[ParsedReading]:
+        parts = [p.strip() for p in line.strip().split("|")]
+        if len(parts) != cls._EXPECTED_FIELDS:
+            return None
+
+        try:
+            sample_name = parts[cls._IDX_SAMPLE_NAME]
+            sample_id = parts[cls._IDX_SAMPLE_ID]
+            method = parts[cls._IDX_METHOD]
+            injection = parts[cls._IDX_INJECTION]
+            peak_name = parts[cls._IDX_PEAK_NAME] or "unknown_peak"
+            retention_time = float(parts[cls._IDX_RET_TIME])
+            area = float(parts[cls._IDX_AREA])
+            height = float(parts[cls._IDX_HEIGHT])
+            amount_str = parts[cls._IDX_AMOUNT]
+            unit = parts[cls._IDX_UNITS]
+            # Sanity-check amount parses; keep string form for hash stability.
+            float(amount_str)
+        except (ValueError, IndexError):
+            return None
+
+        return ParsedReading(
+            parameter=peak_name,
+            value=amount_str,
+            unit=unit,
+            source_timestamp=datetime.now(timezone.utc).isoformat(),
+            raw=line.rstrip("\r\n"),
+            protocol_meta={
+                "sample_name": sample_name,
+                "sample_id_empower": sample_id,
+                "method": method,
+                "injection": injection,
+                "retention_time_min": retention_time,
+                "area": area,
+                "height": height,
+            },
+        )
+
+
+class DissolutionASCIIParser(BaseParser):
+    """Parse dissolution tester ASCII output (Agilent 708-DS, Hanson SR8Plus).
+
+    Dissolution testers emit one row per vessel per timepoint. The
+    accepted format uses an explicit ``DISS`` prefix so the parser
+    cannot collide with other CSV producers::
+
+        DISS,<vessel>,<timepoint_min>,<value>,<unit>
+
+    Examples (USP <711> Apparatus 2 paddle test, 6 vessels, 15 min)::
+
+        DISS,1,15,78.5,%
+        DISS,2,15,80.2,%
+        DISS,3,15,77.9,%
+
+    Each row becomes ONE :class:`ParsedReading` where:
+      - ``parameter`` is ``vessel_<N>_dissolution`` (so multi-vessel runs
+        produce distinct measurement parameters that the cloud side can
+        chart independently)
+      - ``value`` is the dissolution percentage (or amount) as string
+      - ``unit`` is the reported unit (typically ``%`` or ``mg/L``)
+      - ``protocol_meta`` carries vessel and timepoint for downstream
+        USP/EP profile reconstruction.
+
+    The ``DISS,`` prefix is the discriminator. Lines without it fall
+    through to AgilentChemStation (6 fields) or GenericCSV (3 fields)
+    and are not claimed here. Header/comment lines starting with ``#``
+    are explicitly rejected.
+    """
+
+    name = "dissolution_ascii_v1"
+    protocol = "DissolutionASCII"
+
+    _PREFIX = "DISS"
+    _IDX_PREFIX = 0
+    _IDX_VESSEL = 1
+    _IDX_TIMEPOINT = 2
+    _IDX_VALUE = 3
+    _IDX_UNIT = 4
+    _EXPECTED_FIELDS = 5
+
+    @classmethod
+    def can_parse(cls, line: str) -> bool:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            return False
+        parts = [p.strip() for p in stripped.split(",")]
+        if len(parts) != cls._EXPECTED_FIELDS:
+            return False
+        if parts[cls._IDX_PREFIX].upper() != cls._PREFIX:
+            return False
+        # Vessel + timepoint must be integers; value must be float.
+        try:
+            int(parts[cls._IDX_VESSEL])
+            float(parts[cls._IDX_TIMEPOINT])
+            float(parts[cls._IDX_VALUE])
+        except ValueError:
+            return False
+        return True
+
+    @classmethod
+    def extract(cls, line: str) -> Optional[ParsedReading]:
+        parts = [p.strip() for p in line.strip().split(",")]
+        if len(parts) != cls._EXPECTED_FIELDS:
+            return None
+
+        try:
+            vessel = int(parts[cls._IDX_VESSEL])
+            timepoint_min = float(parts[cls._IDX_TIMEPOINT])
+            value_str = parts[cls._IDX_VALUE]
+            unit = parts[cls._IDX_UNIT]
+            float(value_str)
+        except (ValueError, IndexError):
+            return None
+
+        return ParsedReading(
+            parameter=f"vessel_{vessel}_dissolution",
+            value=value_str,
+            unit=unit,
+            source_timestamp=datetime.now(timezone.utc).isoformat(),
+            raw=line.rstrip("\r\n"),
+            protocol_meta={
+                "vessel": vessel,
+                "timepoint_min": timepoint_min,
+            },
+        )
+
+
 # Parser dispatch — order matters. The most specific patterns come first,
 # so a row that matches both Agilent (6 fields, exact shape) and the
 # fall-through GenericCSV (3+ fields with a numeric second field) is
 # claimed by Agilent. GenericCSV remains the last-resort handler.
+# Dissolution + Empower come before Agilent: their discriminators (DISS
+# prefix, pipe delimiter) make them unambiguous and faster to short-circuit.
 PARSERS: list[type[BaseParser]] = [
     MettlerSICSParser,
     SartoriusSBIParser,
+    DissolutionASCIIParser,
+    WatersEmpowerParser,
     AgilentChemStationParser,
     GenericCSVParser,
 ]

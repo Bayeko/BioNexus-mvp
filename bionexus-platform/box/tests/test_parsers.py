@@ -25,11 +25,13 @@ from box_collector import (  # noqa: E402
     AgilentChemStationParser,
     BaseParser,
     CaptureContext,
+    DissolutionASCIIParser,
     GenericCSVParser,
     MettlerSICSParser,
     ParsedReading,
     PARSERS,
     SartoriusSBIParser,
+    WatersEmpowerParser,
     build_capture_payload,
     compute_capture_hash,
     parse_line,
@@ -283,6 +285,168 @@ class TestAgilentChemStationParser:
 
 
 # ---------------------------------------------------------------------------
+# WatersEmpowerParser
+# ---------------------------------------------------------------------------
+
+class TestWatersEmpowerParser:
+    """Tests for the Empower CDS pipe-delimited Result Set parser.
+
+    Format:
+        ``SampleName|SampleID|Method|Injection|PeakName|RetTime|Area|Height|Amount|Units``
+
+    ``value`` is the assay Amount (regulatory release figure), not Area.
+    """
+
+    PEAK_ROW = "QC-100|S-001|USP-007|1|Caffeine|2.456|123456.7|2345.1|99.82|%"
+
+    def test_parse_basic_peak_row(self, ctx: CaptureContext) -> None:
+        result = WatersEmpowerParser.parse(self.PEAK_ROW, ctx)
+        assert result is not None
+        assert result["parameter"] == "Caffeine"
+        assert result["value"] == "99.82"
+        assert result["unit"] == "%"
+        assert result["protocol_meta"]["protocol"] == "Empower"
+        assert result["protocol_meta"]["parser"] == "waters_empower_v1"
+        assert result["protocol_meta"]["sample_name"] == "QC-100"
+        assert result["protocol_meta"]["sample_id_empower"] == "S-001"
+        assert result["protocol_meta"]["method"] == "USP-007"
+        assert result["protocol_meta"]["injection"] == "1"
+        assert result["protocol_meta"]["retention_time_min"] == 2.456
+        assert result["protocol_meta"]["area"] == 123456.7
+        assert result["protocol_meta"]["height"] == 2345.1
+
+    def test_can_parse_rejects_header_row(self) -> None:
+        assert WatersEmpowerParser.can_parse(
+            "SampleName|SampleID|Method|Injection|PeakName|RetTime|Area|Height|Amount|Units"
+        ) is False
+
+    def test_can_parse_rejects_comment_lines(self) -> None:
+        assert WatersEmpowerParser.can_parse(
+            "# Empower Result Set export"
+        ) is False
+
+    def test_can_parse_rejects_wrong_field_count(self) -> None:
+        # Comma-delimited rows must not be claimed (no pipe).
+        assert WatersEmpowerParser.can_parse(
+            "1,2.345,12345.6,234.5,Caffeine,mAU*s"
+        ) is False
+        # 9 fields with pipe — still rejected.
+        assert WatersEmpowerParser.can_parse(
+            "QC-100|S-001|USP-007|1|Caffeine|2.456|123456.7|2345.1|99.82"
+        ) is False
+
+    def test_can_parse_rejects_non_numeric_amount(self) -> None:
+        assert WatersEmpowerParser.can_parse(
+            "QC-100|S-001|USP-007|1|Caffeine|2.456|123456.7|2345.1|N/A|%"
+        ) is False
+
+    def test_empty_peak_name_falls_back(self, ctx: CaptureContext) -> None:
+        result = WatersEmpowerParser.parse(
+            "QC-100|S-001|USP-007|1||2.456|123456.7|2345.1|99.82|%", ctx
+        )
+        assert result is not None
+        assert result["parameter"] == "unknown_peak"
+
+    def test_hash_includes_metadata(self, ctx: CaptureContext) -> None:
+        """SHA-256 must change when context changes (LBN-CONF-001)."""
+        result1 = WatersEmpowerParser.parse(self.PEAK_ROW, ctx)
+        other_ctx = CaptureContext(**{**ctx.to_dict(), "lot_number": "LOT-OTHER"})
+        result2 = WatersEmpowerParser.parse(self.PEAK_ROW, other_ctx)
+        assert result1["data_hash"] != result2["data_hash"]
+
+    def test_dispatch_via_parse_line(self, ctx: CaptureContext) -> None:
+        result = parse_line(self.PEAK_ROW, ctx)
+        assert result is not None
+        assert result["protocol_meta"]["parser"] == "waters_empower_v1"
+
+    def test_raw_line_preserved(self, ctx: CaptureContext) -> None:
+        result = WatersEmpowerParser.parse(self.PEAK_ROW, ctx)
+        assert result is not None
+        assert result["raw"] == self.PEAK_ROW
+
+    def test_extract_returns_none_on_malformed(self) -> None:
+        assert WatersEmpowerParser.extract("garbage") is None
+        assert WatersEmpowerParser.extract("") is None
+
+
+# ---------------------------------------------------------------------------
+# DissolutionASCIIParser
+# ---------------------------------------------------------------------------
+
+class TestDissolutionASCIIParser:
+    """Tests for the dissolution tester ASCII parser.
+
+    Format: ``DISS,<vessel>,<timepoint_min>,<value>,<unit>``
+    Each row is one vessel's dissolution reading at a given timepoint.
+    """
+
+    VESSEL_ROW = "DISS,1,15,78.5,%"
+
+    def test_parse_basic_row(self, ctx: CaptureContext) -> None:
+        result = DissolutionASCIIParser.parse(self.VESSEL_ROW, ctx)
+        assert result is not None
+        assert result["parameter"] == "vessel_1_dissolution"
+        assert result["value"] == "78.5"
+        assert result["unit"] == "%"
+        assert result["protocol_meta"]["protocol"] == "DissolutionASCII"
+        assert result["protocol_meta"]["parser"] == "dissolution_ascii_v1"
+        assert result["protocol_meta"]["vessel"] == 1
+        assert result["protocol_meta"]["timepoint_min"] == 15.0
+
+    def test_multi_vessel_distinct_parameters(self, ctx: CaptureContext) -> None:
+        v1 = DissolutionASCIIParser.parse("DISS,1,30,82.4,%", ctx)
+        v2 = DissolutionASCIIParser.parse("DISS,2,30,80.1,%", ctx)
+        assert v1["parameter"] == "vessel_1_dissolution"
+        assert v2["parameter"] == "vessel_2_dissolution"
+        # Distinct parameters → distinct hashes
+        assert v1["data_hash"] != v2["data_hash"]
+
+    def test_can_parse_requires_diss_prefix(self) -> None:
+        # No prefix — must fall through to other parsers.
+        assert DissolutionASCIIParser.can_parse("1,15,78.5,%,extra") is False
+
+    def test_can_parse_accepts_lowercase_prefix(self) -> None:
+        # Tolerate case so we work with both Hanson (uppercase) and
+        # other vendors that emit lowercase.
+        assert DissolutionASCIIParser.can_parse("diss,1,15,78.5,%") is True
+
+    def test_can_parse_rejects_comment_lines(self) -> None:
+        assert DissolutionASCIIParser.can_parse(
+            "# Hanson SR8Plus dissolution run"
+        ) is False
+
+    def test_can_parse_rejects_wrong_field_count(self) -> None:
+        assert DissolutionASCIIParser.can_parse("DISS,1,15,78.5") is False
+        assert DissolutionASCIIParser.can_parse("DISS,1,15,78.5,%,extra") is False
+
+    def test_can_parse_rejects_non_integer_vessel(self) -> None:
+        assert DissolutionASCIIParser.can_parse("DISS,one,15,78.5,%") is False
+
+    def test_can_parse_rejects_non_numeric_value(self) -> None:
+        assert DissolutionASCIIParser.can_parse("DISS,1,15,N/A,%") is False
+
+    def test_hash_includes_metadata(self, ctx: CaptureContext) -> None:
+        result1 = DissolutionASCIIParser.parse(self.VESSEL_ROW, ctx)
+        other_ctx = CaptureContext(**{**ctx.to_dict(), "operator": "OP-OTHER"})
+        result2 = DissolutionASCIIParser.parse(self.VESSEL_ROW, other_ctx)
+        assert result1["data_hash"] != result2["data_hash"]
+
+    def test_dispatch_via_parse_line(self, ctx: CaptureContext) -> None:
+        result = parse_line(self.VESSEL_ROW, ctx)
+        assert result is not None
+        assert result["protocol_meta"]["parser"] == "dissolution_ascii_v1"
+
+    def test_raw_line_preserved(self, ctx: CaptureContext) -> None:
+        result = DissolutionASCIIParser.parse(self.VESSEL_ROW, ctx)
+        assert result is not None
+        assert result["raw"] == self.VESSEL_ROW
+
+    def test_extract_returns_none_on_malformed(self) -> None:
+        assert DissolutionASCIIParser.extract("garbage") is None
+        assert DissolutionASCIIParser.extract("") is None
+
+
+# ---------------------------------------------------------------------------
 # Parser dispatch
 # ---------------------------------------------------------------------------
 
@@ -305,6 +469,21 @@ class TestParseLineDispatch:
         assert result["protocol_meta"]["parser"] in (
             "mettler_sics_v1", "sartorius_sbi_v1"
         )
+
+    def test_dissolution_dispatched(self, ctx: CaptureContext) -> None:
+        # DISS prefix must claim the line before GenericCSV (also 3+ fields).
+        result = parse_line("DISS,3,45,91.7,%", ctx)
+        assert result is not None
+        assert result["protocol_meta"]["parser"] == "dissolution_ascii_v1"
+
+    def test_empower_dispatched(self, ctx: CaptureContext) -> None:
+        # Pipe-delimited 10-field rows go to Empower.
+        result = parse_line(
+            "QC-100|S-001|USP-007|1|Caffeine|2.456|123456.7|2345.1|99.82|%",
+            ctx,
+        )
+        assert result is not None
+        assert result["protocol_meta"]["parser"] == "waters_empower_v1"
 
     def test_unmatched_line_returns_none(self, ctx: CaptureContext) -> None:
         assert parse_line("!!! garbage !!!", ctx) is None

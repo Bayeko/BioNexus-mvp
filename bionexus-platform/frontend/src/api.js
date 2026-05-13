@@ -115,6 +115,37 @@ export async function createMeasurement(payload) {
   return res.json();
 }
 
+// --- Veeva Vault QMS connector ---
+
+export function fetchVeevaStatus(vendor = 'veeva') {
+  return request(`/api/integrations/veeva/status/?vendor=${encodeURIComponent(vendor)}`);
+}
+
+export function fetchVeevaPushLog(filters = {}) {
+  const mapped = {};
+  if (filters.vendor) mapped.vendor = filters.vendor;
+  if (filters.status) mapped.status = filters.status;
+  return request(`/api/integrations/veeva/log/${buildQS(mapped)}`);
+}
+
+export function fetchVeevaOAuthStatus() {
+  return request('/api/integrations/veeva/oauth/status/');
+}
+
+export function fetchVeevaAuthorizeUrl() {
+  return request('/api/integrations/veeva/oauth/authorize-url/');
+}
+
+export async function postVeevaOAuthCallback(code, state) {
+  const res = await fetch('/api/integrations/veeva/oauth/callback/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, state }),
+  });
+  const body = await res.json();
+  return { ok: res.ok, ...body };
+}
+
 // --- Audit ---
 
 export function fetchAuditLogs(filters = {}) {

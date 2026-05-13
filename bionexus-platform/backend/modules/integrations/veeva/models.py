@@ -189,3 +189,66 @@ class IntegrationPushLog(models.Model):
             f"status={self.status} "
             f"vault_id={self.target_object_id or '-'}"
         )
+
+
+# ---------------------------------------------------------------------------
+# OAuth2 token cache (singleton)
+# ---------------------------------------------------------------------------
+
+class VeevaOAuthToken(models.Model):
+    """Singleton row that caches the active Vault OAuth2 tokens.
+
+    v1 supports one OAuth identity per Labionexus deployment, so the
+    table is operated as a singleton on pk=1. The columns store the
+    encrypted access + refresh tokens (Fernet, key derived from
+    SECRET_KEY) plus the active CSRF state token mid-flow.
+
+    Storing the tokens persistently — rather than in a cache — means
+    a Django restart does not force the operator to re-authorize.
+    State is short-lived (10 min TTL enforced in code) so even if a
+    crash leaves it stale, the next flow simply mints a new one.
+    """
+
+    # --- Encrypted token credentials ---
+    access_token_enc = models.TextField(
+        blank=True,
+        help_text="Fernet-encrypted OAuth2 access token. Refreshed automatically.",
+    )
+    refresh_token_enc = models.TextField(
+        blank=True,
+        help_text="Fernet-encrypted OAuth2 refresh token. Long-lived.",
+    )
+    token_expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the cached access token expires (UTC).",
+    )
+
+    # --- CSRF state for in-progress authorize flow ---
+    oauth_state = models.CharField(
+        max_length=128,
+        blank=True,
+        help_text=(
+            "CSRF state token for the current authorize flow. "
+            "Cleared once the callback succeeds, or after 10 min."
+        ),
+    )
+    oauth_state_created_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the active state token was minted (10-min TTL).",
+    )
+
+    # --- Bookkeeping ---
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "integrations_veeva_oauth_token"
+        verbose_name = "Veeva OAuth2 token"
+        verbose_name_plural = "Veeva OAuth2 tokens"
+
+    def __str__(self) -> str:
+        if self.access_token_enc and self.token_expires_at:
+            return f"VeevaOAuthToken (expires {self.token_expires_at.isoformat()})"
+        return "VeevaOAuthToken (uninitialised)"

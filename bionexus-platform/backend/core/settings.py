@@ -150,6 +150,33 @@ STATIC_URL = "static/"
 
 
 # ---------------------------------------------------------------------------
+# Celery / async task queue
+# ---------------------------------------------------------------------------
+# In production set CELERY_BROKER_URL to a Redis instance (e.g.
+# redis://localhost:6379/0). In dev and tests CELERY_TASK_ALWAYS_EAGER
+# defaults to True so tasks run inline and no broker is required.
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = os.environ.get(
+    "CELERY_RESULT_BACKEND", "redis://localhost:6379/0",
+)
+CELERY_TASK_ALWAYS_EAGER = os.environ.get(
+    "CELERY_TASK_ALWAYS_EAGER", "true",
+).lower() == "true"
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_TASK_TIME_LIMIT = 600       # hard 10-min timeout per task
+CELERY_TASK_SOFT_TIME_LIMIT = 540  # soft 9-min for graceful cleanup
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_TIMEZONE = "UTC"
+CELERY_BEAT_SCHEDULE = {
+    "retry-failed-veeva-pushes": {
+        "task": "modules.integrations.veeva.tasks.retry_failed_pushes",
+        "schedule": 300.0,  # every 5 minutes when `celery beat` is running
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # Veeva Vault integration (LBN-INT-VEEVA-001)
 # ---------------------------------------------------------------------------
 # VEEVA_MODE pickin order: disabled (default, prod-safe) | mock | sandbox | prod.

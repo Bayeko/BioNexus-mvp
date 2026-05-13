@@ -179,9 +179,12 @@ const INTEGRATIONS = [
     features: [
       'HMAC-SHA256 signed payloads (defense-in-depth over TLS)',
       'Exponential backoff + dead-letter queue on retries',
+      'OAuth2 Authorization Code OR Session-ID auth flow',
+      'Async push via Celery worker (optional)',
       'Field mapping respects 21 CFR Part 11 §11.10 attribution',
       'Mode-switchable: disabled / mock / sandbox / prod',
     ],
+    docUrl: '/integrations/veeva',
   },
   {
     id: 'benchling',

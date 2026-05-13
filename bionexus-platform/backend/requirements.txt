@@ -15,3 +15,15 @@ pytest-django==4.11.1
 # the SDK only initializes when SENTRY_DSN is set in the environment,
 # so dev and CI runs without a DSN behave identically to before.
 sentry-sdk[django]>=2.0.0,<3.0.0
+
+# Symmetric encryption (Fernet) for at-rest credential storage of
+# external LIMS / QMS OAuth tokens. Key is derived from SECRET_KEY at
+# runtime ; rotate SECRET_KEY only with a planned re-encryption migration.
+cryptography>=42.0.0
+
+# Async task queue for Veeva push and future workers. Production needs
+# CELERY_BROKER_URL pointed at Redis (or RabbitMQ). Dev + CI run with
+# CELERY_TASK_ALWAYS_EAGER=True so tasks execute synchronously inline
+# with no broker required.
+celery>=5.3,<6.0
+redis>=5.0

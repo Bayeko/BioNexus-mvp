@@ -10,6 +10,8 @@ import Parsing from './pages/Parsing';
 import MeasurementsGlobal from './pages/MeasurementsGlobal';
 import Integrations from './pages/Integrations';
 import CaptureMeasurement from './pages/CaptureMeasurement';
+import VeevaConnect from './pages/VeevaConnect';
+import VeevaOAuthCallback from './pages/VeevaOAuthCallback';
 
 export default function AppRoutes() {
   return (
@@ -24,6 +26,8 @@ export default function AppRoutes() {
         <Route path="/audit" element={<AuditLog />} />
         <Route path="/parsing" element={<Parsing />} />
         <Route path="/integrations" element={<Integrations />} />
+        <Route path="/integrations/veeva" element={<VeevaConnect />} />
+        <Route path="/integrations/veeva/callback" element={<VeevaOAuthCallback />} />
       </Route>
     </Routes>
   );

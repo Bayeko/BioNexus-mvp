@@ -2525,3 +2525,234 @@ a:hover { text-decoration: underline; }
 .threshold-banner--block strong {
   color: #fecaca;
 }
+
+
+/* ========== Veeva Connect — Tabs ========== */
+.veeva-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border, #2a2a2e);
+  margin: 20px 0 24px;
+}
+
+.veeva-tab {
+  background: transparent;
+  border: 0;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted, #8b8b8b);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.veeva-tab:hover {
+  color: var(--text-primary, #e6e6e6);
+}
+
+.veeva-tab--active {
+  color: var(--text-primary, #e6e6e6);
+  border-bottom-color: #2E75B6;
+}
+
+.veeva-tab-panel {
+  min-height: 280px;
+}
+
+/* ========== Veeva Connect — Status grid ========== */
+.veeva-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.veeva-stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px 20px;
+  background: var(--surface-subtle, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--border, #2a2a2e);
+  border-radius: 10px;
+}
+
+.veeva-stat-card__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted, #8b8b8b);
+}
+
+.veeva-stat-card__value {
+  font-size: 12px;
+  color: var(--text-secondary, #b8b8b8);
+  word-break: break-all;
+}
+
+.veeva-stat-card__sub {
+  font-size: 11px;
+  color: var(--text-muted, #8b8b8b);
+  text-transform: uppercase;
+}
+
+.veeva-stat-card__big {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary, #e6e6e6);
+}
+
+.veeva-stat-card__big--ok    { color: #7ce38b; }
+.veeva-stat-card__big--warn  { color: #fbbf24; }
+.veeva-stat-card__big--err   { color: #fca5a5; }
+
+/* ========== Veeva Connect — OAuth section ========== */
+.veeva-oauth-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px 20px;
+  background: var(--surface-subtle, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--border, #2a2a2e);
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.veeva-oauth-row__title {
+  margin: 0 0 4px 0;
+  font-size: 15px;
+  color: var(--text-primary, #e6e6e6);
+}
+
+.veeva-oauth-row__desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted, #8b8b8b);
+  max-width: 460px;
+}
+
+.veeva-oauth-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* ========== Veeva Connect — Status pill ========== */
+.veeva-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.veeva-status-pill__icon {
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* ========== Veeva Connect — Empty state ========== */
+.veeva-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-muted, #8b8b8b);
+}
+
+.veeva-empty__icon {
+  margin-bottom: 16px;
+  opacity: 0.6;
+}
+
+.veeva-empty__title {
+  margin: 0 0 8px 0;
+  color: var(--text-secondary, #b8b8b8);
+  font-size: 16px;
+}
+
+.veeva-empty__message {
+  max-width: 420px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ========== Veeva Connect — Loading skeleton ========== */
+.veeva-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0;
+}
+
+.veeva-skeleton__row {
+  height: 56px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.025) 0%,
+    rgba(255, 255, 255, 0.05) 50%,
+    rgba(255, 255, 255, 0.025) 100%
+  );
+  background-size: 200% 100%;
+  animation: veeva-skeleton-shimmer 1.6s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+@keyframes veeva-skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ========== Toasts ========== */
+.toast-stack {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.toast-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 280px;
+  max-width: 420px;
+  padding: 12px 16px;
+  border: 1px solid;
+  border-radius: 6px;
+  font-size: 13px;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  animation: toast-slide-in 0.2s ease-out;
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.toast-message {
+  line-height: 1.4;
+}
+
+@keyframes toast-slide-in {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}

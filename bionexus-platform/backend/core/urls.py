@@ -17,6 +17,7 @@ from modules.instruments.views import InstrumentViewSet, InstrumentConfigViewSet
 from modules.measurements.views import MeasurementViewSet, MeasurementContextViewSet
 from modules.protocols.views import ProtocolViewSet
 from modules.samples.views import SampleViewSet
+from modules.integrations.veeva import mock_oauth as veeva_mock_oauth
 
 router = DefaultRouter()
 router.register(r"instruments", InstrumentViewSet, basename="instrument")
@@ -43,6 +44,13 @@ urlpatterns = [
     path("api/persistence/", include("modules.persistence.urls")),
     path("api/parsing/", include("core.parsing_urls")),
     path("api/integrations/veeva/", include("modules.integrations.veeva.urls")),
+    # In-process mock of Vault's OAuth2 endpoints. Active in DEBUG or
+    # when VEEVA_MOCK_OAUTH_DJANGO=true. Set
+    # VEEVA_BASE_URL=http://localhost:8000/mock-veeva to drive the
+    # OAuth flow without a real Vault sandbox.
+    path("mock-veeva/auth/oauth2/authorize", veeva_mock_oauth.mock_authorize, name="mock-veeva-authorize"),
+    path("mock-veeva/auth/oauth2/token", veeva_mock_oauth.mock_token, name="mock-veeva-token"),
+    path("mock-veeva/auth/oauth2/userinfo", veeva_mock_oauth.mock_userinfo, name="mock-veeva-userinfo"),
     # Export endpoints
     path("api/export/", export_formats),
     path("api/export/measurements/csv/", export_measurements_csv),

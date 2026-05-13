@@ -1,12 +1,18 @@
-"""Read-only Veeva integration status + push log endpoints.
+"""Veeva integration HTTP surface.
 
-These power the Integrations.jsx "Veeva Vault" card. Both endpoints are
-intentionally GET-only and read-only: the integration is driven from
-signals + the mock server, not from the API surface.
+Read-only endpoints (powering Integrations.jsx + dedicated VeevaConnect):
+  - GET  /api/integrations/veeva/status/      integration mode + counts
+  - GET  /api/integrations/veeva/log/         push log list (filterable)
+
+OAuth2 Authorization Code endpoints (only meaningful when
+``VEEVA_AUTH_FLOW=oauth2``):
+  - GET  /api/integrations/veeva/oauth/authorize-url/   start the flow
+  - POST /api/integrations/veeva/oauth/callback/        complete the swap
+  - GET  /api/integrations/veeva/oauth/status/          token status
 
 Auth: same DRF defaults as the rest of /api/. The push log can contain
-operator IDs (pseudonymized) and lot numbers (operational data), so it's
-not public — sits behind the same JWT auth as everything else.
+operator IDs (pseudonymized) and lot numbers (operational data), so it
+is not public — sits behind the same JWT auth as everything else.
 """
 
 from __future__ import annotations
@@ -17,7 +23,8 @@ from rest_framework.decorators import api_view
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from .models import IntegrationPushLog
+from . import oauth
+from .models import IntegrationPushLog, VeevaOAuthToken
 from .serializers import IntegrationPushLogSerializer
 
 
@@ -101,3 +108,88 @@ def _badge_label(mode: str, enabled: bool) -> str:
     if mode == "prod":
         return "PRODUCTION"
     return "UNKNOWN"
+
+
+# ---------------------------------------------------------------------------
+# OAuth2 endpoints (Authorization Code flow)
+# ---------------------------------------------------------------------------
+
+@api_view(["GET"])
+def oauth_authorize_url(request):
+    """Return the URL the operator should browse to begin OAuth2.
+
+    Side effect : mints a fresh CSRF state token and persists it on
+    the singleton :class:`VeevaOAuthToken` row. The token is round-
+    tripped through Vault and validated when the callback comes back.
+    """
+    if not oauth.is_oauth2_enabled():
+        return Response(
+            {"detail": "VEEVA_AUTH_FLOW is not set to oauth2."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        url = oauth.build_authorize_url()
+    except oauth.VeevaOAuthError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"authorize_url": url})
+
+
+@api_view(["POST"])
+def oauth_callback(request):
+    """Complete the OAuth2 flow by exchanging the code for tokens.
+
+    Body : ``{"code": "<vault-code>", "state": "<round-tripped-state>"}``
+    The frontend strips both parameters off the redirect_uri landing
+    page and POSTs them here.
+    """
+    if not oauth.is_oauth2_enabled():
+        return Response(
+            {"detail": "VEEVA_AUTH_FLOW is not set to oauth2."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    code = request.data.get("code")
+    state = request.data.get("state")
+    if not code or not state:
+        return Response(
+            {"detail": "code and state are required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        oauth.exchange_code_for_tokens(code, state)
+    except oauth.VeevaOAuthError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    record = VeevaOAuthToken.objects.get(pk=1)
+    return Response(
+        {
+            "success": True,
+            "access_token_expires_at": record.token_expires_at,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+def oauth_status(request):
+    """Report whether OAuth2 is configured and whether a token is cached.
+
+    Used by the frontend to decide between "Connect via OAuth2" (no
+    token) and "Re-authorize" (token cached). Never exposes the token
+    itself.
+    """
+    enabled = oauth.is_oauth2_enabled()
+    try:
+        record = VeevaOAuthToken.objects.get(pk=1)
+        has_token = bool(record.access_token_enc) and bool(record.token_expires_at)
+        expires_at = record.token_expires_at
+    except VeevaOAuthToken.DoesNotExist:
+        has_token = False
+        expires_at = None
+    return Response(
+        {
+            "oauth2_enabled": enabled,
+            "has_active_token": has_token,
+            "token_expires_at": expires_at,
+        }
+    )

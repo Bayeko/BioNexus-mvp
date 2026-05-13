@@ -79,8 +79,40 @@ class SandboxVeevaClient(HttpVeevaClient):
         )
 
     def _auth_headers(self) -> dict:
+        """Return the Authorization header for outbound calls.
+
+        Two auth flows are supported, dispatched on the
+        ``VEEVA_AUTH_FLOW`` env var :
+
+        - ``session_id`` (default) : ``VEEVA_SESSION_TOKEN`` env var
+          supplies a Bearer token. Matches the v1 spec and the rest of
+          the LIMS suite.
+        - ``oauth2`` : the access token is fetched from the
+          :class:`VeevaOAuthToken` singleton and refreshed transparently
+          via ``oauth.get_or_refresh_access_token``. Requires the
+          operator to have completed the Authorization Code flow once.
+        """
         headers = super()._auth_headers()
-        token = os.environ.get("VEEVA_SESSION_TOKEN", "")
+        auth_flow = os.environ.get("VEEVA_AUTH_FLOW", "session_id").lower()
+
+        if auth_flow == "oauth2":
+            # Local import so the OAuth module + cryptography only load
+            # when actually needed (keeps Session-ID-only deployments
+            # free of the cryptography dependency at import time).
+            try:
+                from . import oauth as veeva_oauth
+
+                token = veeva_oauth.get_or_refresh_access_token()
+            except Exception as exc:  # noqa: BLE001 — explicit fallback
+                log.warning(
+                    "Veeva OAuth2 auth header lookup failed: %s ; falling "
+                    "back to Session-ID env token (likely empty).",
+                    exc,
+                )
+                token = ""
+        else:
+            token = os.environ.get("VEEVA_SESSION_TOKEN", "")
+
         if token:
             headers["Authorization"] = f"Bearer {token}"
         return headers

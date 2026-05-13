@@ -403,42 +403,6 @@ class KarlFischerParser(BaseParser):
     _PREFIX = "KF"
     _MIN_FIELDS = 4
     _MAX_FIELDS = 7
-class AgilentChemStationParser(BaseParser):
-    """Parse Agilent ChemStation peak report CSV output.
-
-    Typical export shape (text or CSV with header + peak data lines)::
-
-        # Agilent ChemStation Peak Report
-        # Method: USP-007.M
-        # Instrument: HPLC-Agilent-1260
-        Peak,RetTime,Area,Height,Name,Unit
-        1,2.345,12345.6,234.5,Caffeine,mAU*s
-        2,3.876,8765.4,123.4,Aspirin,mAU*s
-
-    Each peak data row becomes ONE :class:`ParsedReading` where :
-      - ``parameter`` is the compound name (field 4)
-      - ``value`` is the peak area (field 2)
-      - ``unit`` is the area unit (field 5)
-      - ``protocol_meta`` carries peak_number, retention_time, height
-
-    Header lines starting with ``#`` and the ``Peak,RetTime,...`` table
-    header are rejected by :meth:`can_parse` so the parser only consumes
-    actual data rows. This keeps the BaseParser contract intact (one
-    line in, one reading out) and lets the collector dispatch line by
-    line as the ChemStation export is streamed.
-    """
-
-    name = "agilent_chemstation_v1"
-    protocol = "ChemStation"
-
-    # Indices into the comma-split row, named for readability.
-    _IDX_PEAK_NUMBER = 0
-    _IDX_RET_TIME = 1
-    _IDX_AREA = 2
-    _IDX_HEIGHT = 3
-    _IDX_NAME = 4
-    _IDX_UNIT = 5
-    _EXPECTED_FIELDS = 6
 
     @classmethod
     def can_parse(cls, line: str) -> bool:
@@ -446,26 +410,15 @@ class AgilentChemStationParser(BaseParser):
         if not stripped or stripped.startswith("#"):
             return False
         parts = [p.strip() for p in stripped.split(",")]
-        if parts[0] != cls._PREFIX:
+        if not parts or parts[0] != cls._PREFIX:
             return False
         if not (cls._MIN_FIELDS <= len(parts) <= cls._MAX_FIELDS):
             return False
-        # Field 2 (value) must be numeric
+        # Field 2 (value) must parse as float
         try:
             float(parts[2])
         except (ValueError, IndexError):
             return False
-        if len(parts) != cls._EXPECTED_FIELDS:
-            return False
-        # Reject the table header row "Peak,RetTime,..."
-        if parts[cls._IDX_RET_TIME].lower() == "rettime":
-            return False
-        # Validate that retention_time, area, and height all parse as floats
-        for idx in (cls._IDX_RET_TIME, cls._IDX_AREA, cls._IDX_HEIGHT):
-            try:
-                float(parts[idx])
-            except ValueError:
-                return False
         return True
 
     @classmethod
@@ -507,14 +460,63 @@ class AgilentChemStationParser(BaseParser):
         )
 
 
-# Parser dispatch — order matters. The most specific patterns come first
-# so a row that matches both a specific protocol (KF prefix, Agilent 6-
-# field shape) and the fall-through GenericCSV is claimed by the more
-# specific one. GenericCSV remains the last-resort handler.
-PARSERS: list[type[BaseParser]] = [
-    MettlerSICSParser,
-    SartoriusSBIParser,
-    KarlFischerParser,
+class AgilentChemStationParser(BaseParser):
+    """Parse Agilent ChemStation peak report CSV output.
+
+    Typical export shape (text or CSV with header + peak data lines)::
+
+        # Agilent ChemStation Peak Report
+        # Method: USP-007.M
+        # Instrument: HPLC-Agilent-1260
+        Peak,RetTime,Area,Height,Name,Unit
+        1,2.345,12345.6,234.5,Caffeine,mAU*s
+        2,3.876,8765.4,123.4,Aspirin,mAU*s
+
+    Each peak data row becomes ONE :class:`ParsedReading` where :
+      - ``parameter`` is the compound name (field 4)
+      - ``value`` is the peak area (field 2)
+      - ``unit`` is the area unit (field 5)
+      - ``protocol_meta`` carries peak_number, retention_time, height
+
+    Header lines starting with ``#`` and the ``Peak,RetTime,...`` table
+    header are rejected by :meth:`can_parse` so the parser only consumes
+    actual data rows.
+    """
+
+    name = "agilent_chemstation_v1"
+    protocol = "ChemStation"
+
+    # Indices into the comma-split row, named for readability.
+    _IDX_PEAK_NUMBER = 0
+    _IDX_RET_TIME = 1
+    _IDX_AREA = 2
+    _IDX_HEIGHT = 3
+    _IDX_NAME = 4
+    _IDX_UNIT = 5
+    _EXPECTED_FIELDS = 6
+
+    @classmethod
+    def can_parse(cls, line: str) -> bool:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            return False
+        parts = [p.strip() for p in stripped.split(",")]
+        if len(parts) != cls._EXPECTED_FIELDS:
+            return False
+        # Reject the table header row "Peak,RetTime,..."
+        if parts[cls._IDX_RET_TIME].lower() == "rettime":
+            return False
+        # Validate that retention_time, area, and height all parse as floats
+        for idx in (cls._IDX_RET_TIME, cls._IDX_AREA, cls._IDX_HEIGHT):
+            try:
+                float(parts[idx])
+            except ValueError:
+                return False
+        return True
+
+    @classmethod
+    def extract(cls, line: str) -> Optional[ParsedReading]:
+        parts = [p.strip() for p in line.strip().split(",")]
         if len(parts) != cls._EXPECTED_FIELDS:
             return None
 
@@ -742,11 +744,14 @@ class DissolutionASCIIParser(BaseParser):
 # so a row that matches both Agilent (6 fields, exact shape) and the
 # fall-through GenericCSV (3+ fields with a numeric second field) is
 # claimed by Agilent. GenericCSV remains the last-resort handler.
-# Dissolution + Empower come before Agilent: their discriminators (DISS
-# prefix, pipe delimiter) make them unambiguous and faster to short-circuit.
+#
+# Prefix-discriminated parsers (KF, DISS) and pipe-delimited Empower
+# come before Agilent / GenericCSV: their discriminators make them
+# unambiguous and faster to short-circuit.
 PARSERS: list[type[BaseParser]] = [
     MettlerSICSParser,
     SartoriusSBIParser,
+    KarlFischerParser,
     DissolutionASCIIParser,
     WatersEmpowerParser,
     AgilentChemStationParser,

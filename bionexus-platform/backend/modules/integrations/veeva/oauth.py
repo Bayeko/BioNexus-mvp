@@ -40,8 +40,6 @@ For testing without a Vault sandbox we mock all three (see
 
 from __future__ import annotations
 
-import base64
-import hashlib
 import logging
 import os
 import secrets
@@ -50,9 +48,10 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlencode
 
 import requests
-from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
 from django.utils import timezone
+
+from core import encryption as core_encryption
 
 if TYPE_CHECKING:
     from .models import VeevaOAuthToken
@@ -79,43 +78,39 @@ class VeevaOAuthError(RuntimeError):
 
 
 # ---------------------------------------------------------------------------
-# Symmetric encryption (Fernet)
+# Symmetric encryption — delegated to the pluggable core.encryption module
 # ---------------------------------------------------------------------------
-
-def _fernet() -> Fernet:
-    """Build a Fernet instance keyed off Django SECRET_KEY.
-
-    SECRET_KEY is hashed to a 32-byte key then base64-urlsafe-encoded,
-    matching Fernet's required format. Rotating SECRET_KEY requires
-    re-encrypting any persisted ciphertext via a data migration ; until
-    then a rotated SECRET_KEY will raise :class:`VeevaOAuthError` on
-    decrypt and the operator must re-enter the OAuth credentials.
-    """
-    raw = hashlib.sha256(settings.SECRET_KEY.encode("utf-8")).digest()
-    return Fernet(base64.urlsafe_b64encode(raw))
+#
+# Veeva OAuth credentials at rest are encrypted via ``core.encryption``,
+# which exposes 3 backends (secret_key default, env_key, gcp_kms stub).
+# Switch with the ``ENCRYPTION_PROVIDER`` env var. See
+# ``core/encryption.py`` for the full activation procedure.
+#
+# We keep thin local wrappers so existing call sites + tests don't have
+# to import core.encryption directly, and so a decrypt failure surfaces
+# as the Veeva-domain :class:`VeevaOAuthError`.
 
 
 def encrypt(plaintext: str) -> str:
     """Encrypt a string for at-rest storage. Empty -> empty (idempotent)."""
-    if not plaintext:
-        return ""
-    return _fernet().encrypt(plaintext.encode("utf-8")).decode("utf-8")
+    return core_encryption.encrypt(plaintext)
 
 
 def decrypt(ciphertext: str) -> str:
     """Decrypt a string produced by :func:`encrypt`.
 
-    Empty input returns empty (the default for unset secrets).
-    Raises :class:`VeevaOAuthError` on tampering or key mismatch.
+    Raises :class:`VeevaOAuthError` on tampering or key mismatch so
+    callers can react to the Veeva-domain error type ; the underlying
+    :class:`core.encryption.EncryptionError` is wrapped.
     """
     if not ciphertext:
         return ""
     try:
-        return _fernet().decrypt(ciphertext.encode("utf-8")).decode("utf-8")
-    except InvalidToken as exc:
+        return core_encryption.decrypt(ciphertext)
+    except core_encryption.EncryptionError as exc:
         raise VeevaOAuthError(
-            "Cannot decrypt Veeva OAuth credential ; SECRET_KEY may have "
-            "rotated. Re-run the OAuth flow."
+            "Cannot decrypt Veeva OAuth credential ; check ENCRYPTION_PROVIDER "
+            "/ SECRET_KEY configuration and re-run the OAuth flow."
         ) from exc
 
 

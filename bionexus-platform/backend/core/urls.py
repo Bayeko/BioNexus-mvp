@@ -6,11 +6,12 @@ from core.api_views import CertificationSigningViewSet, TOTPViewSet
 from core.audit_views import AuditLogViewSet
 from core.health_views import healthz
 from core.export_views import (
+    export_audit_csv,
+    export_audit_pdf,
     export_formats,
     export_measurements_csv,
     export_measurements_pdf,
     export_samples_csv,
-    export_audit_csv,
 )
 from core.webhook_views import WebhookSubscriptionViewSet, WebhookEventListView
 from modules.instruments.views import InstrumentViewSet, InstrumentConfigViewSet
@@ -57,6 +58,7 @@ urlpatterns = [
     path("api/export/measurements/pdf/", export_measurements_pdf),
     path("api/export/samples/csv/", export_samples_csv),
     path("api/export/audit/csv/", export_audit_csv),
+    path("api/export/audit/pdf/", export_audit_pdf),
     # API Documentation (Swagger UI)
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
